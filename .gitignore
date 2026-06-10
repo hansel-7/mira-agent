@@ -6,7 +6,8 @@
 # Cloned skills repo (separate git repo, not part of this project)
 greennode-agentbase-skills/
 
-# Agentbase wizard state
+# Agentbase wizard state and token cache
 .agentbase-state.json
+.agentbase/
 .greennode.json
 .agentbase/

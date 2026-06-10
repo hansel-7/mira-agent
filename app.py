@@ -13,7 +13,7 @@ client = OpenAI(
     api_key=os.getenv("HACKATHON_API_KEY"),
 )
 
-SYSTEM_PROMPT = "You are Mira, a helpful AI assistant."
+SYSTEM_PROMPT = "You are Mira, a helpful and friendly AI assistant."
 
 
 @app.route("/health")

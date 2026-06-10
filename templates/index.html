@@ -173,31 +173,6 @@
 
     #send-btn svg { width: 18px; height: 18px; fill: #fff; }
 
-    #empty-state {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      color: #4b5563;
-      pointer-events: none;
-    }
-
-    #empty-state .big-avatar {
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #6366f1, #a855f7);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
-      font-weight: 700;
-      color: #fff;
-    }
-
-    #empty-state p { font-size: 15px; }
   </style>
 </head>
 <body>
@@ -209,12 +184,7 @@
   </div>
 </header>
 
-<div id="chat">
-  <div id="empty-state">
-    <div class="big-avatar">M</div>
-    <p>Send a message to start chatting</p>
-  </div>
-</div>
+  <div id="chat"></div>
 
 <div id="input-area">
   <div id="input-wrap">
@@ -227,12 +197,16 @@
 
 <script>
   const chatEl = document.getElementById("chat");
-  const emptyState = document.getElementById("empty-state");
   const inputEl = document.getElementById("user-input");
   const sendBtn = document.getElementById("send-btn");
 
-  let history = [];
+  const GREETING = "Hi. This is Mira. How are you feeling today?";
+
+  let history = [{ role: "assistant", content: GREETING }];
   let isStreaming = false;
+
+  // Show greeting on load
+  addMessage("assistant", GREETING);
 
   function autoResize() {
     inputEl.style.height = "auto";
@@ -251,8 +225,6 @@
   sendBtn.addEventListener("click", sendMessage);
 
   function addMessage(role, content = "") {
-    if (emptyState) emptyState.style.display = "none";
-
     const msg = document.createElement("div");
     msg.className = `message ${role}`;
 
