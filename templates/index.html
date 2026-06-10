@@ -95,6 +95,9 @@
       max-width: calc(100% - 52px);
       white-space: pre-wrap;
       word-break: break-word;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
 
     .message.assistant .bubble {
@@ -107,6 +110,14 @@
       background: #6366f1;
       color: #fff;
       border-top-right-radius: 4px;
+    }
+
+    .bubble img {
+      max-width: 280px;
+      max-height: 280px;
+      border-radius: 8px;
+      object-fit: contain;
+      display: block;
     }
 
     .cursor-blink::after {
@@ -126,8 +137,7 @@
 
     #input-wrap {
       display: flex;
-      align-items: flex-end;
-      gap: 10px;
+      flex-direction: column;
       max-width: 780px;
       margin: 0 auto;
       background: #1a1a22;
@@ -138,6 +148,65 @@
     }
 
     #input-wrap:focus-within { border-color: #6366f1; }
+
+    #image-preview {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #2a2a35;
+      margin-bottom: 8px;
+    }
+
+    #image-preview.visible { display: flex; }
+
+    #image-preview img {
+      width: 56px;
+      height: 56px;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+
+    #image-preview-remove {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #3f3f4e;
+      border: none;
+      cursor: pointer;
+      color: #9ca3af;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    #image-preview-remove:hover { background: #ef4444; color: #fff; }
+
+    #input-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    #attach-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: #2a2a35;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+
+    #attach-btn:hover { background: #3f3f4e; }
+    #attach-btn svg { width: 18px; height: 18px; fill: #9ca3af; }
 
     #user-input {
       flex: 1;
@@ -170,9 +239,7 @@
 
     #send-btn:hover { background: #4f46e5; }
     #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
     #send-btn svg { width: 18px; height: 18px; fill: #fff; }
-
   </style>
 </head>
 <body>
@@ -184,14 +251,24 @@
   </div>
 </header>
 
-  <div id="chat"></div>
+<div id="chat"></div>
 
 <div id="input-area">
   <div id="input-wrap">
-    <textarea id="user-input" rows="1" placeholder="Message Mira…"></textarea>
-    <button id="send-btn" title="Send">
-      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-    </button>
+    <div id="image-preview">
+      <img id="image-preview-thumb" src="" alt="preview" />
+      <button id="image-preview-remove" title="Remove image">✕</button>
+    </div>
+    <div id="input-row">
+      <button id="attach-btn" title="Attach image">
+        <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+      </button>
+      <input type="file" id="file-input" accept="image/*" style="display:none" />
+      <textarea id="user-input" rows="1" placeholder="Message Mira… (or paste an image)"></textarea>
+      <button id="send-btn" title="Send">
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -199,14 +276,54 @@
   const chatEl = document.getElementById("chat");
   const inputEl = document.getElementById("user-input");
   const sendBtn = document.getElementById("send-btn");
+  const attachBtn = document.getElementById("attach-btn");
+  const fileInput = document.getElementById("file-input");
+  const imagePreview = document.getElementById("image-preview");
+  const imagePreviewThumb = document.getElementById("image-preview-thumb");
+  const imagePreviewRemove = document.getElementById("image-preview-remove");
 
   const GREETING = "Hi. This is Mira. How are you feeling today?";
 
   let history = [{ role: "assistant", content: GREETING }];
   let isStreaming = false;
+  let selectedImage = null; // { dataUrl: string }
 
-  // Show greeting on load
   addMessage("assistant", GREETING);
+
+  // — Image selection —
+
+  attachBtn.addEventListener("click", () => fileInput.click());
+
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files[0]) loadImage(fileInput.files[0]);
+    fileInput.value = "";
+  });
+
+  document.addEventListener("paste", (e) => {
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+    if (item) loadImage(item.getAsFile());
+  });
+
+  imagePreviewRemove.addEventListener("click", clearImage);
+
+  function loadImage(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      selectedImage = { dataUrl: e.target.result };
+      imagePreviewThumb.src = e.target.result;
+      imagePreview.classList.add("visible");
+      inputEl.focus();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearImage() {
+    selectedImage = null;
+    imagePreviewThumb.src = "";
+    imagePreview.classList.remove("visible");
+  }
+
+  // — Input auto-resize —
 
   function autoResize() {
     inputEl.style.height = "auto";
@@ -224,7 +341,9 @@
 
   sendBtn.addEventListener("click", sendMessage);
 
-  function addMessage(role, content = "") {
+  // — Render messages —
+
+  function addMessage(role, text = "", imageDataUrl = null) {
     const msg = document.createElement("div");
     msg.className = `message ${role}`;
 
@@ -234,29 +353,55 @@
 
     const bubble = document.createElement("div");
     bubble.className = "bubble";
-    bubble.textContent = content;
+
+    if (imageDataUrl) {
+      const img = document.createElement("img");
+      img.src = imageDataUrl;
+      img.alt = "attached image";
+      bubble.appendChild(img);
+    }
+
+    const textNode = document.createElement("span");
+    textNode.textContent = text;
+    bubble.appendChild(textNode);
 
     msg.appendChild(avatarEl);
     msg.appendChild(bubble);
     chatEl.appendChild(msg);
     chatEl.scrollTop = chatEl.scrollHeight;
 
-    return bubble;
+    return { bubble, textNode };
   }
+
+  // — Send —
 
   async function sendMessage() {
     const text = inputEl.value.trim();
-    if (!text || isStreaming) return;
+    if (!text && !selectedImage || isStreaming) return;
 
     isStreaming = true;
     sendBtn.disabled = true;
+
+    const capturedImage = selectedImage;
     inputEl.value = "";
     inputEl.style.height = "auto";
+    clearImage();
 
-    addMessage("user", text);
-    history.push({ role: "user", content: text });
+    // Build message content for the LLM
+    let userContent;
+    if (capturedImage) {
+      userContent = [
+        { type: "image_url", image_url: { url: capturedImage.dataUrl } },
+        { type: "text", text: text || "" },
+      ];
+    } else {
+      userContent = text;
+    }
 
-    const bubble = addMessage("assistant");
+    addMessage("user", text, capturedImage?.dataUrl);
+    history.push({ role: "user", content: userContent });
+
+    const { bubble, textNode } = addMessage("assistant");
     bubble.classList.add("cursor-blink");
 
     let reply = "";
@@ -287,13 +432,13 @@
           try {
             const { content } = JSON.parse(data);
             reply += content;
-            bubble.textContent = reply;
+            textNode.textContent = reply;
             chatEl.scrollTop = chatEl.scrollHeight;
           } catch {}
         }
       }
-    } catch (err) {
-      bubble.textContent = "Error: could not reach the server.";
+    } catch {
+      textNode.textContent = "Error: could not reach the server.";
     }
 
     bubble.classList.remove("cursor-blink");
