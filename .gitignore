@@ -1,0 +1,12 @@
+# Environment variables - never commit secrets
+.env
+.env.local
+.env*.local
+
+# Cloned skills repo (separate git repo, not part of this project)
+greennode-agentbase-skills/
+
+# Agentbase wizard state
+.agentbase-state.json
+.greennode.json
+.agentbase/

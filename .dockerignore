@@ -1,0 +1,14 @@
+.env
+.env.local
+.greennode.json
+.agentbase-state.json
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+.gitattributes
+greennode-agentbase-skills/
+.cursor/
+*.md
+.agentbase/
