@@ -1,3 +1,7 @@
+# Dependencies and build output
+node_modules/
+pixel-cat/dist/
+
 # Environment variables - never commit secrets
 .env
 .env.local

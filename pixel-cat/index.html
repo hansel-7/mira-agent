@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      overflow: hidden;
+      font-family: 'Courier New', monospace;
+    }
+    #cat {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      image-rendering: pixelated;
+      user-select: none;
+      cursor: grab;
+    }
+    #bubble {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(320px, 92%);
+      box-sizing: border-box;
+      background: #0a0a0a;
+      border: 3px solid #fff;
+      color: #fff;
+      padding: 10px 14px;
+      font-size: 15px;
+      font-weight: bold;
+      line-height: 1.35;
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: none;
+      box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+    }
+    #bubble::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      bottom: -12px;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: #fff;
+    }
+    #inputWrap {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(320px, 92%);
+      display: none;
+    }
+    #chat {
+      width: 100%;
+      box-sizing: border-box;
+      background: #0a0a0a;
+      border: 3px solid #fff;
+      color: #fff;
+      padding: 9px 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 15px;
+      font-weight: bold;
+      outline: none;
+      box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+    }
+    #chat::placeholder { color: #888; }
+  </style>
+</head>
+<body>
+  <div id="bubble"></div>
+  <canvas id="cat"></canvas>
+  <div id="inputWrap"><input id="chat" placeholder="Say something to Mira..." /></div>
+  <script>
+    const SPRITE = 80;
+
+    const canvas = document.getElementById('cat');
+    const ctx = canvas.getContext('2d');
+    const bubble = document.getElementById('bubble');
+    const inputWrap = document.getElementById('inputWrap');
+    const chat = document.getElementById('chat');
+
+    const buf = document.createElement('canvas');
+    buf.width = SPRITE;
+    buf.height = SPRITE;
+    const bctx = buf.getContext('2d');
+
+    const baseImg = new Image();
+    baseImg.src = 'assets/mira_base.png';
+    const rigImg = new Image();
+    rigImg.src = 'assets/mira_rig.png';
+    const yapImg = new Image(); // 2 frames of 320x320: closed / pop
+    yapImg.src = 'assets/mira_yapping.png';
+    const typImg = new Image(); // 2 frames of 80x80: typing at the keyboard
+    typImg.src = 'assets/mira_typing_80x80.png';
+
+    let meta = null;
+    fetch('assets/rig-meta.json')
+      .then((r) => r.json())
+      .then((m) => {
+        meta = m;
+        for (const [name, r] of Object.entries(m.regions)) state[name] = r.neutral;
+      });
+
+    // ---------- layout (window = bubble area + cat + input area) ----------
+    function applyLayout(l) {
+      const size = SPRITE * l.scale;
+      canvas.width = size;
+      canvas.height = size;
+      canvas.style.width = size + 'px';
+      canvas.style.height = size + 'px';
+      canvas.style.top = l.bubbleH + 'px';
+      bubble.style.bottom = (window.innerHeight - l.bubbleH + 12) + 'px';
+      inputWrap.style.top = (l.bubbleH + size + 8) + 'px';
+      ctx.imageSmoothingEnabled = false;
+    }
+    window.catAPI.onLayout(applyLayout);
+    applyLayout({ scale: 3, bubbleH: 150, inputH: 56 });
+
+    // ---------- layer states (populated from rig-meta neutrals once it loads) ----------
+    const state = {};
+    let blinking = false;
+    let speaking = false;
+
+    function rand(a, b) { return a + Math.random() * (b - a); }
+
+    function scheduleEar(name) {
+      setTimeout(() => {
+        state[name] = Math.random() < 0.5 ? 0 : 2;
+        setTimeout(() => {
+          state[name] = 1;
+          scheduleEar(name);
+        }, 150);
+      }, rand(3000, 9000));
+    }
+    scheduleEar('earL');
+    scheduleEar('earR');
+
+    (function tailSway() {
+      const seq = [0, 1, 2, 1];
+      let i = 0;
+      (function step() {
+        setTimeout(() => {
+          i = (i + 1) % seq.length;
+          state.tail = seq[i];
+          step();
+        }, rand(500, 900));
+      })();
+    })();
+
+    function scheduleWhisk(name) {
+      setTimeout(() => {
+        state[name] = Math.floor(Math.random() * 3);
+        scheduleWhisk(name);
+      }, rand(2500, 6000));
+    }
+    scheduleWhisk('whiskL');
+    scheduleWhisk('whiskR');
+
+    (function scheduleBlink() {
+      setTimeout(() => {
+        blinking = true;
+        setTimeout(() => {
+          blinking = false;
+          scheduleBlink();
+        }, 150);
+      }, rand(2500, 6000));
+    })();
+
+    // popcat loop while speaking: closed face ↔ giant gape
+    let pop = false;
+    let holdPop = false; // freeze on the closed-mouth frame after the text finishes
+    (function mouthLoop() {
+      setInterval(() => {
+        pop = speaking ? (!holdPop && !pop) : false;
+      }, 170);
+    })();
+
+    // ---------- typing reaction (global keystrokes) ----------
+    let typFrame = 0;
+    let typingUntil = 0;
+    window.catAPI.onKey(() => {
+      typFrame = 1 - typFrame; // each stroke alternates the paws
+      typingUntil = performance.now() + 450;
+    });
+
+    // ---------- cursor: eyes + body lean ----------
+    let cursor = { x: 0, y: 0 };
+    window.catAPI.onCursor((p) => (cursor = p));
+
+    const pupil = { x: 0, y: 0 };
+    let lean = 0;
+
+    function tick() {
+      const t = meta.pupilTravel; // only called once meta is loaded
+      const dist = Math.hypot(cursor.x, cursor.y);
+      const onCat = dist < canvas.width * 0.55;
+      const tx = onCat ? 0 : (cursor.x / dist) * (t + 0.4);
+      const ty = onCat ? 0 : (cursor.y / dist) * (t + 0.4);
+      const leanTarget = onCat ? 0 : Math.sign(cursor.x) * 2;
+      pupil.x += (tx - pupil.x) * 0.2;
+      pupil.y += (ty - pupil.y) * 0.2;
+      lean += (leanTarget - lean) * 0.08;
+    }
+
+    function drawRegion(name, vi) {
+      const r = meta.regions[name];
+      bctx.clearRect(r.x, r.y, r.w, r.h);
+      bctx.drawImage(rigImg, r.sx[vi], 0, r.w, r.h, r.x, r.y, r.w, r.h);
+    }
+
+    function drawPupils() {
+      const t = meta.pupilTravel;
+      let dx = Math.max(-t, Math.min(t, Math.round(pupil.x / 2) * 2));
+      let dy = Math.max(-t, Math.min(t, Math.round(pupil.y / 2) * 2));
+      bctx.fillStyle = '#000';
+      for (const key of ['left', 'right']) {
+        const p = meta.eyes[key].pupil;
+        const x = p.x + dx;
+        const y = p.y + dy;
+        bctx.fillRect(x, y + 1, p.w, p.h - 2);
+        bctx.fillRect(x + 1, y, p.w - 2, 1);
+        bctx.fillRect(x + 1, y + p.h - 1, p.w - 2, 1);
+      }
+    }
+
+    function draw() {
+      requestAnimationFrame(draw);
+      if (speaking && yapImg.complete) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(yapImg, pop ? 320 : 0, 0, 320, 320, 0, 0, canvas.width, canvas.height);
+        return;
+      }
+      if (typingUntil > performance.now() && typImg.complete) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(typImg, typFrame * 80, 0, 80, 80, 0, 0, canvas.width, canvas.height);
+        return;
+      }
+      if (!meta || !baseImg.complete || !rigImg.complete) return;
+      tick();
+
+      bctx.clearRect(0, 0, SPRITE, SPRITE);
+      bctx.drawImage(baseImg, 0, 0);
+      for (const name of ['earL', 'earR', 'tail', 'whiskL', 'whiskR', 'mouth']) {
+        drawRegion(name, state[name]);
+      }
+      if (blinking) {
+        drawRegion('blink', 0);
+      } else {
+        drawPupils();
+      }
+
+      const k = canvas.width / SPRITE;
+      const split = meta.leanSplit;
+      const leanPx = Math.round(lean / 2) * 2 * k;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(buf, 0, 0, SPRITE, split, leanPx, 0, canvas.width, split * k);
+      ctx.drawImage(buf, 0, split, SPRITE, SPRITE - split, 0, split * k, canvas.width, (SPRITE - split) * k);
+    }
+    draw();
+
+    // ---------- chat ----------
+    let chatOpen = false;
+    let holdTimer = null;
+
+    function openChat() {
+      chatOpen = true;
+      inputWrap.style.display = 'block';
+      window.catAPI.setIgnore(false);
+      chat.focus();
+    }
+    function closeChat() {
+      chatOpen = false;
+      inputWrap.style.display = 'none';
+      chat.value = '';
+      bubble.style.display = 'none';
+    }
+
+    // ---------- agent chat (streamed from main over IPC) ----------
+    const history = [];
+    let reqId = 0;
+    let target = '';      // full reply received so far
+    let printed = 0;      // chars typed into the bubble
+    let streamDone = false;
+    let printTimer = null;
+
+    function startSpeaking() {
+      clearTimeout(holdTimer);
+      clearTimeout(printTimer);
+      holdPop = false;
+      target = '';
+      printed = 0;
+      streamDone = false;
+      bubble.textContent = '...';
+      bubble.style.display = 'block';
+      speaking = true;
+      printLoop();
+    }
+
+    function printLoop() {
+      if (printed < target.length) {
+        if (printed === 0) bubble.textContent = '';
+        bubble.textContent += target[printed++];
+        printTimer = setTimeout(printLoop, 45);
+      } else if (streamDone) {
+        finishSpeaking();
+      } else {
+        printTimer = setTimeout(printLoop, 80); // caught up — wait for the stream
+      }
+    }
+
+    function finishSpeaking() {
+      // hold the closed-mouth frame for a beat, then settle back to idle;
+      // the bubble stays up until the chat is closed
+      holdPop = true;
+      pop = false;
+      holdTimer = setTimeout(() => {
+        speaking = false;
+        holdPop = false;
+      }, 2000);
+    }
+
+    window.catAPI.onChatChunk((d) => {
+      if (d.id !== reqId) return; // chunk from an aborted request
+      if (d.error) {
+        target += (target ? '\n' : '') + "Mrrp?! (can't reach my brain: " + d.error + ')';
+        streamDone = true;
+        return;
+      }
+      if (d.content) target += d.content;
+      if (d.done) {
+        streamDone = true;
+        history.push({ role: 'assistant', content: target });
+      }
+    });
+
+    chat.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeChat();
+      if (e.key === 'Enter' && chat.value.trim()) {
+        const q = chat.value.trim();
+        chat.value = '';
+        history.push({ role: 'user', content: q });
+        if (history.length > 30) history.splice(0, history.length - 30);
+        startSpeaking();
+        window.catAPI.chatSend({ id: ++reqId, history });
+      }
+    });
+    window.addEventListener('blur', () => {
+      if (chatOpen) closeChat();
+    });
+
+    // ---------- click-through management ----------
+    // window is click-through except over the cat, the input, or the bubble
+    let ignoring = true;
+    function rectOf(el) { return el.getBoundingClientRect(); }
+    function pointIn(x, y, r) { return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; }
+    window.addEventListener('mousemove', (e) => {
+      let over = pointIn(e.clientX, e.clientY, rectOf(canvas));
+      if (chatOpen) over = over || pointIn(e.clientX, e.clientY, rectOf(inputWrap));
+      if (bubble.style.display !== 'none') over = over || pointIn(e.clientX, e.clientY, rectOf(bubble));
+      if (over === ignoring) {
+        ignoring = !over;
+        window.catAPI.setIgnore(ignoring);
+      }
+    });
+
+    // ---------- cat interactions ----------
+    let down = false;
+    let moved = false;
+    canvas.addEventListener('mousedown', () => {
+      down = true;
+      moved = false;
+      window.catAPI.dragStart();
+    });
+    window.addEventListener('mousemove', () => {
+      if (!down) return;
+      moved = true;
+      window.catAPI.dragMove();
+    });
+    window.addEventListener('mouseup', () => {
+      down = false;
+      window.catAPI.dragEnd();
+    });
+    canvas.addEventListener('click', () => {
+      if (moved) return;
+      chatOpen ? closeChat() : openChat();
+    });
+    canvas.addEventListener('dblclick', () => window.catAPI.quit());
+    canvas.addEventListener('wheel', (e) => {
+      window.catAPI.resize(e.deltaY < 0 ? 1 : -1);
+    });
+  </script>
+</body>
+</html>
