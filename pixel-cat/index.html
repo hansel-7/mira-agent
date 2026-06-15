@@ -22,19 +22,24 @@
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
-      width: min(320px, 92%);
+      width: min(400px, 94%);
       box-sizing: border-box;
       background: #0a0a0a;
       border: 3px solid #fff;
       color: #fff;
-      padding: 10px 14px;
       font-size: 15px;
       font-weight: bold;
       line-height: 1.35;
-      white-space: pre-wrap;
-      word-break: break-word;
       display: none;
       box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+    }
+    /* inner element scrolls; outer keeps the border + speech tail unclipped */
+    #bubbleText {
+      max-height: 220px;
+      overflow-y: auto;
+      padding: 10px 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
     #bubble::after {
       content: '';
@@ -49,7 +54,7 @@
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
-      width: min(320px, 92%);
+      width: min(400px, 94%);
       display: none;
     }
     #chat {
@@ -69,7 +74,7 @@
   </style>
 </head>
 <body>
-  <div id="bubble"></div>
+  <div id="bubble"><div id="bubbleText"></div></div>
   <canvas id="cat"></canvas>
   <div id="inputWrap"><input id="chat" placeholder="Say something to Mira..." /></div>
   <script>
@@ -78,6 +83,7 @@
     const canvas = document.getElementById('cat');
     const ctx = canvas.getContext('2d');
     const bubble = document.getElementById('bubble');
+    const bubbleText = document.getElementById('bubbleText');
     const inputWrap = document.getElementById('inputWrap');
     const chat = document.getElementById('chat');
 
@@ -183,7 +189,26 @@
     window.catAPI.onKey(() => {
       typFrame = 1 - typFrame; // each stroke alternates the paws
       typingUntil = performance.now() + 450;
+      heat = Math.min(1, heat + HEAT_GAIN); // each stroke stokes the overheat
     });
+
+    // ---------- overheat: fast typing gradually reddens the cat ----------
+    // heat 0..1 climbs HEAT_GAIN per keystroke, cools HEAT_COOL/sec while idle,
+    // so it only reaches red under sustained fast typing (~HEAT_COOL/HEAT_GAIN keys/sec).
+    const HEAT_GAIN = 0.075;
+    const HEAT_COOL = 0.70;
+    const HEAT_MAX_ALPHA = 0.8; // red overlay opacity at full heat
+    let heat = 0;
+    let lastT = performance.now();
+
+    function applyHeatTint() {
+      if (heat <= 0.001) return;
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-atop'; // only paints over the cat, not the transparent bg
+      ctx.fillStyle = 'rgba(230, 40, 30, ' + (heat * HEAT_MAX_ALPHA).toFixed(3) + ')';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
 
     // ---------- cursor: eyes + body lean ----------
     let cursor = { x: 0, y: 0 };
@@ -227,14 +252,21 @@
 
     function draw() {
       requestAnimationFrame(draw);
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - lastT) / 1000); // clamp to avoid a jump after a stall
+      lastT = now;
+      if (heat > 0) heat = Math.max(0, heat - dt * HEAT_COOL);
+
       if (speaking && yapImg.complete) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(yapImg, pop ? 320 : 0, 0, 320, 320, 0, 0, canvas.width, canvas.height);
+        applyHeatTint();
         return;
       }
-      if (typingUntil > performance.now() && typImg.complete) {
+      if (typingUntil > now && typImg.complete) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(typImg, typFrame * 80, 0, 80, 80, 0, 0, canvas.width, canvas.height);
+        applyHeatTint();
         return;
       }
       if (!meta || !baseImg.complete || !rigImg.complete) return;
@@ -257,6 +289,7 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(buf, 0, 0, SPRITE, split, leanPx, 0, canvas.width, split * k);
       ctx.drawImage(buf, 0, split, SPRITE, SPRITE - split, 0, split * k, canvas.width, (SPRITE - split) * k);
+      applyHeatTint();
     }
     draw();
 
@@ -271,6 +304,7 @@
       chat.focus();
     }
     function closeChat() {
+      if (onboarding) return; // don't let the first-run flow be dismissed
       chatOpen = false;
       inputWrap.style.display = 'none';
       chat.value = '';
@@ -285,24 +319,31 @@
     let streamDone = false;
     let printTimer = null;
 
-    function startSpeaking() {
+    // yapNow=false: show the "…" bubble but stay idle until text starts arriving
+    // (so she doesn't yap through the wait for the first token); yapNow=true: yap now (local lines)
+    function startSpeaking(yapNow) {
       clearTimeout(holdTimer);
       clearTimeout(printTimer);
       holdPop = false;
       target = '';
       printed = 0;
       streamDone = false;
-      bubble.textContent = '...';
+      bubbleText.textContent = '...';
       bubble.style.display = 'block';
-      speaking = true;
+      speaking = !!yapNow;
       printLoop();
     }
 
     function printLoop() {
       if (printed < target.length) {
-        if (printed === 0) bubble.textContent = '';
-        bubble.textContent += target[printed++];
-        printTimer = setTimeout(printLoop, 45);
+        if (printed === 0) bubbleText.textContent = '';
+        // type faster the further behind we are, so long replies don't yap forever
+        const backlog = target.length - printed;
+        const step = Math.max(1, Math.ceil(backlog / 45));
+        bubbleText.textContent += target.slice(printed, printed + step);
+        printed += step;
+        bubbleText.scrollTop = bubbleText.scrollHeight; // follow the latest text
+        printTimer = setTimeout(printLoop, 35);
       } else if (streamDone) {
         finishSpeaking();
       } else {
@@ -321,25 +362,68 @@
       }, 2000);
     }
 
+    // show a local line (onboarding questions, etc.) using the same yap + typewriter
+    function say(text) {
+      startSpeaking(true); // local text is ready now, so yap immediately
+      target = text;
+      streamDone = true;
+    }
+
     window.catAPI.onChatChunk((d) => {
       if (d.id !== reqId) return; // chunk from an aborted request
       if (d.error) {
         target += (target ? '\n' : '') + "Mrrp?! (can't reach my brain: " + d.error + ')';
         streamDone = true;
+        speaking = true; // yap out the error line
         return;
       }
-      if (d.content) target += d.content;
+      if (d.content) {
+        target += d.content;
+        speaking = true; // first token arrived -> start yapping now
+      }
       if (d.done) {
         streamDone = true;
         history.push({ role: 'assistant', content: target });
       }
     });
 
+    // ---------- first-run onboarding (scripted Q&A -> profile.json) ----------
+    const QUESTIONS = [
+      { key: 'name', text: () => "Hi! I'm Mira ✨ What should I call you?" },
+      { key: 'department', text: (a) => `Nice to meet you, ${a.name}! Which team or department are you on?` },
+      { key: 'hobbies', text: () => "What do you like doing for fun?" },
+      { key: 'behavior', text: () => "Last one — how should I talk to you? (e.g. concise, playful, formal)" },
+    ];
+    let onboarding = false;
+    let obStep = 0;
+    const answers = {};
+
+    function startOnboarding() {
+      onboarding = true;
+      obStep = 0;
+      chat.placeholder = 'Type your answer…';
+      openChat();
+      say(QUESTIONS[0].text(answers));
+    }
+    function handleAnswer(ans) {
+      answers[QUESTIONS[obStep].key] = ans;
+      obStep++;
+      if (obStep < QUESTIONS.length) {
+        say(QUESTIONS[obStep].text(answers));
+      } else {
+        onboarding = false;
+        chat.placeholder = 'Say something to Mira…';
+        window.catAPI.saveProfile({ ...answers });
+        say(`Got it, ${answers.name}! I'll remember that. Click me whenever you want to chat 🐾`);
+      }
+    }
+
     chat.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeChat();
+      if (e.key === 'Escape') { closeChat(); return; }
       if (e.key === 'Enter' && chat.value.trim()) {
         const q = chat.value.trim();
         chat.value = '';
+        if (onboarding) { handleAnswer(q); return; }
         history.push({ role: 'user', content: q });
         if (history.length > 30) history.splice(0, history.length - 30);
         startSpeaking();
@@ -348,6 +432,11 @@
     });
     window.addEventListener('blur', () => {
       if (chatOpen) closeChat();
+    });
+
+    // on first launch (no saved profile) kick off onboarding
+    window.catAPI.getProfile().then((p) => {
+      if (!p) startOnboarding();
     });
 
     // ---------- click-through management ----------

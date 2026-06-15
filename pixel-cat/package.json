@@ -2,14 +2,42 @@
   "name": "pixel-cat",
   "version": "0.1.0",
   "description": "Comnyang-style desktop pixel cat - idle + eye-follow prototype",
+  "author": "Mira team",
   "main": "main.js",
   "scripts": {
-    "start": "node node_modules/electron/cli.js ."
+    "start": "node node_modules/electron/cli.js .",
+    "pack": "node node_modules/electron-builder/out/cli/cli.js --dir --win",
+    "dist": "node node_modules/electron-builder/out/cli/cli.js --win"
   },
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
   },
   "dependencies": {
     "uiohook-napi": "^1.5.5"
+  },
+  "build": {
+    "appId": "vn.vng.mira-pixelcat",
+    "productName": "Mira",
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "config.json",
+      "assets/**/*"
+    ],
+    "asarUnpack": [
+      "**/node_modules/uiohook-napi/**"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    }
   }
 }
