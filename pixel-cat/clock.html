@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+    #box {
+      font-family: 'Courier New', monospace;
+      text-align: center;
+      padding: 6px 4px;
+      user-select: none;
+      /* black outline so the text stays legible on any desktop, with no box */
+      text-shadow:
+        -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+        0 -2px 0 #000, 0 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000;
+    }
+    #phase { font-size: 11px; font-weight: bold; letter-spacing: 1px; }
+    #time { font-size: 28px; font-weight: bold; line-height: 1.1; }
+  </style>
+</head>
+<body>
+  <div id="box">
+    <div id="phase">FOCUS</div>
+    <div id="time">--:--</div>
+  </div>
+  <script>
+    const phaseEl = document.getElementById('phase');
+    const timeEl = document.getElementById('time');
+    const LABEL = { focus: 'FOCUS', break: 'BREAK', long: 'LONG BREAK' };
+    const AUTO = { focus: '#ff5a4d', break: '#4dd07a', long: '#4dd07a' };
+
+    let colorMode = 'auto'; // 'auto' = tint by phase, otherwise a fixed hex
+    let phase = 'focus';
+
+    function paint() {
+      const c = colorMode === 'auto' ? (AUTO[phase] || '#fff') : colorMode;
+      phaseEl.style.color = c;
+      timeEl.style.color = c;
+    }
+
+    window.clock.onTick(({ phase: p, remaining }) => {
+      phase = p;
+      phaseEl.textContent = LABEL[p] || '';
+      const m = Math.floor(remaining / 60);
+      const s = remaining % 60;
+      timeEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      paint();
+    });
+    window.clock.onColor((c) => { colorMode = c || 'auto'; paint(); });
+
+    paint();
+  </script>
+</body>
+</html>

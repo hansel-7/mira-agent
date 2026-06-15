@@ -304,7 +304,7 @@
       chat.focus();
     }
     function closeChat() {
-      if (onboarding) return; // don't let the first-run flow be dismissed
+      if (onboarding || intro) return; // don't let the first-run flow be dismissed
       chatOpen = false;
       inputWrap.style.display = 'none';
       chat.value = '';
@@ -369,6 +369,14 @@
       streamDone = true;
     }
 
+    // reminders firing / pomodoro phase changes: Mira pops a bubble, auto-hides if idle
+    let notifyHideTimer = null;
+    window.catAPI.onNotify((text) => {
+      say(text);
+      clearTimeout(notifyHideTimer);
+      notifyHideTimer = setTimeout(() => { if (!chatOpen) bubble.style.display = 'none'; }, 12000);
+    });
+
     window.catAPI.onChatChunk((d) => {
       if (d.id !== reqId) return; // chunk from an aborted request
       if (d.error) {
@@ -412,15 +420,56 @@
         say(QUESTIONS[obStep].text(answers));
       } else {
         onboarding = false;
-        chat.placeholder = 'Say something to Mira…';
         window.catAPI.saveProfile({ ...answers });
-        say(`Got it, ${answers.name}! I'll remember that. Click me whenever you want to chat 🐾`);
+        startIntro(); // roll into the feature tour
       }
     }
 
+    // ---------- first-run feature tour (after onboarding) ----------
+    const INTRO = [
+      "Click me anytime to chat — I'm hooked up to a real AI 🧠",
+      "Right-click me for the menu: reminders, a Pomodoro timer, profile, and clock colour.",
+      "Reminders can be one-off, daily, or weekly — open Reminders… to add or delete them.",
+      "Start a Pomodoro and a little timer sits beside me, tracking your focus and breaks.",
+      "Drag me around, scroll on me to resize, and double-click to quit.",
+      "Type fast anywhere and I'll heat up 🔥 — try it sometime!",
+    ];
+    let intro = false;
+    let introStep = 0;
+
+    function startIntro() {
+      intro = true;
+      introStep = 0;
+      chat.readOnly = true;
+      chat.placeholder = 'Press Enter or click me to continue… (Esc skips)';
+      openChat();
+      say(`Got it, ${answers.name}! ✨ Quick tour of what I can do — Enter to flip through.`);
+    }
+    function advanceIntro() {
+      if (introStep < INTRO.length) {
+        say(INTRO[introStep]);
+        introStep++;
+      } else {
+        endIntro();
+      }
+    }
+    function endIntro() {
+      intro = false;
+      chat.readOnly = false;
+      chat.value = '';
+      chat.placeholder = 'Say something to Mira…';
+      say(`That's the tour — ask me anything, ${answers.name}! 🐾`);
+    }
+
     chat.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeChat(); return; }
-      if (e.key === 'Enter' && chat.value.trim()) {
+      if (e.key === 'Escape') {
+        if (intro) { endIntro(); return; } // Esc skips the tour
+        closeChat();
+        return;
+      }
+      if (e.key === 'Enter') {
+        if (intro) { e.preventDefault(); advanceIntro(); return; }
+        if (!chat.value.trim()) return;
         const q = chat.value.trim();
         chat.value = '';
         if (onboarding) { handleAnswer(q); return; }
@@ -473,11 +522,16 @@
     });
     canvas.addEventListener('click', () => {
       if (moved) return;
+      if (intro) { advanceIntro(); return; }
       chatOpen ? closeChat() : openChat();
     });
     canvas.addEventListener('dblclick', () => window.catAPI.quit());
     canvas.addEventListener('wheel', (e) => {
       window.catAPI.resize(e.deltaY < 0 ? 1 : -1);
+    });
+    canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      window.catAPI.showMenu();
     });
   </script>
 </body>

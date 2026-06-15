@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root { --ink: #0a0a0a; --line: #0a0a0a; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 18px;
+      background: #f4f4f4;
+      color: var(--ink);
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+    }
+    h1 { font-size: 18px; margin: 0 0 14px; }
+    label { display: block; font-weight: bold; margin: 12px 0 4px; }
+    input, textarea {
+      width: 100%;
+      font-family: inherit;
+      font-size: 14px;
+      padding: 8px 10px;
+      border: 3px solid var(--line);
+      background: #fff;
+      outline: none;
+      resize: none;
+    }
+    input:focus, textarea:focus { box-shadow: 3px 3px 0 rgba(0,0,0,.4); }
+    .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+    button {
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: bold;
+      padding: 8px 16px;
+      border: 3px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      box-shadow: 3px 3px 0 rgba(0,0,0,.4);
+    }
+    button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 rgba(0,0,0,.4); }
+    button.primary { background: var(--ink); color: #fff; }
+  </style>
+</head>
+<body>
+  <h1>Edit profile</h1>
+  <label for="name">Name</label>
+  <input id="name" maxlength="60" />
+  <label for="department">Department / team</label>
+  <input id="department" maxlength="80" />
+  <label for="hobbies">Hobbies / interests</label>
+  <textarea id="hobbies" rows="2" maxlength="200"></textarea>
+  <label for="behavior">How should Mira talk to you?</label>
+  <input id="behavior" maxlength="120" placeholder="e.g. concise, playful, formal" />
+  <div class="row">
+    <button id="cancel">Cancel</button>
+    <button id="save" class="primary">Save</button>
+  </div>
+  <script>
+    const fields = ['name', 'department', 'hobbies', 'behavior'];
+    const el = (id) => document.getElementById(id);
+
+    window.api.getProfile().then((p) => {
+      if (p) for (const f of fields) if (p[f]) el(f).value = p[f];
+      el('name').focus();
+    });
+
+    function save() {
+      const data = {};
+      for (const f of fields) data[f] = el(f).value.trim();
+      window.api.saveProfile(data);
+      window.api.close();
+    }
+
+    el('save').addEventListener('click', save);
+    el('cancel').addEventListener('click', () => window.api.close());
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') window.api.close();
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) save();
+    });
+  </script>
+</body>
+</html>

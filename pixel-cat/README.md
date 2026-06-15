@@ -20,12 +20,18 @@ The cat appears near the bottom-right of your screen.
 - **Overheat** — sustained fast typing gradually reddens the cat on a gradient (heat builds per keystroke, cools when you stop); a red `source-atop` overlay tints the silhouette, scaling with heat
 - **Drag** the cat to move it, **scroll** on it to resize
 - **Double-click** to quit
+- **Right-click** for a menu: Reminders…, Start/Stop Pomodoro…, Timer color ▸, Edit profile…, Quit
+- **First run** — Mira runs a scripted onboarding (name/department/hobbies/behaviour) then a quick feature tour (Enter/click to advance, Esc to skip); returning users skip both
+- **Reminders** — one-off, daily, or weekly; the Reminders… window lists/adds/deletes them and Mira pops a bubble at the remind-before time and at the deadline (one-offs auto-remove)
+- **Pomodoro** — set focus/break/long-break/intervals; a small transparent timer HUD sits beside Mira (follows her when dragged/resized) and she announces each phase; menu flips to Stop Pomodoro
 - The window is larger than the cat (room for the speech bubble + input) but is click-through everywhere except the cat and the chat UI
 
 ## Architecture
 
 - `main.js` — transparent always-on-top frameless window; polls global cursor every 50ms; global key hook via `uiohook-napi` (fails soft if unavailable); manual window dragging, resize, and click-through over IPC; relays chat to the agent (`POST /chat`, SSE) and streams chunks to the renderer — the `file://` renderer can't call the endpoint itself (no CORS on the backend)
-- `preload.js` — exposes `catAPI` (cursor/key/layout events, drag, resize, quit)
+- `preload.js` — exposes `catAPI` (cursor/key/layout events, drag, resize, quit, menu, profile, notify)
+- Right-click menu is built in `main.js` and popped natively; menu items that need input open small framed form windows in `dialogs/` (`profile.html`, `reminders.html`, `pomodoro.html`) via the shared `dialog-preload.js`. The Pomodoro timer HUD is a separate transparent click-through window (`clock.html` + `clock-preload.js`) positioned beside Mira
+- State in `userData` (`%APPDATA%/Mira/`): `profile.json` (onboarding), `reminders.json` (reminder engine — two `setTimeout`s each, recurring rolls forward), `settings.json` (clock colour). `backgroundThrottling: false` on the pet + clock windows so neither freezes when a dialog/menu is focused
 - `index.html` — all rendering and behavior. Draw priority: speaking (yap frames) > typing (keyboard frames) > idle rig
   - Idle: composites `assets/mira_base.png` + patch regions from `assets/mira_rig.png` (ears/tail/whiskers/mouth/blink, per `assets/rig-meta.json`) on an 80×80 buffer; pupils drawn dynamically to track the cursor; upscales nearest-neighbor with a slight body lean
   - Speaking: draws `assets/mira_yapping.png` (2 frames @ 320×320, closed/pop) directly, alternating every 170ms
@@ -56,11 +62,11 @@ First-run experience that personalizes Mira per user.
 2. **Profile file** — raw answers saved to `profile.json` in `app.getPath('userData')` (`%APPDATA%/Mira/`, since `main.js` calls `app.setName('Mira')`), **not** the app folder. The packaged .exe bundles the app read-only (asar), so runtime-writable data must live in `userData`. Distinction to keep: `config.json` = bundled/read-only (agent URL); `profile.json` = runtime/writable/per-user. Only raw answers are stored; the personalization sentence is derived at request time (no stale copy).
 3. **Personalized chat** — the agent is stateless/remote and can't read the local file, so context is injected client-side: `main.js` builds a `{role:"system"}` message from the profile (`profileSystemMessage()`) and **prepends it to the history of every `/chat` request** — no backend change. (If a model ever mishandles two system messages, the alternative is a `userContext` field that `app.py` merges into one prompt; would need a redeploy.)
 
-No "Edit profile" yet — to re-run onboarding, delete `%APPDATA%/Mira/profile.json`. The edit/reset entry comes with the right-click menu below.
+Profile is editable via the right-click **Edit profile…** dialog. After onboarding, first-run users get a scripted feature tour (`INTRO` in `index.html`).
 
-### Right-click menu
+### Right-click menu — implemented
 
-Native Electron context menu (`Menu.buildFromTemplate` + `popup()`), triggered by a `contextmenu` listener on the cat → IPC → main process. Initial items (mostly stubs): Reminders, Pomodoro, Edit profile (re-runs onboarding), Skin ▸ (see below), Quit.
+Native context menu (`Menu.buildFromTemplate` + `popup()`) via a `contextmenu` listener → IPC → main. Items: Reminders…, Start/Stop Pomodoro…, Timer color ▸, Edit profile…, Quit. Form dialogs live in `dialogs/`; see the Architecture section. Reminders support once/daily/weekly with a manage list; Pomodoro drives the HUD clock window. A **Skin ▸** entry will be added with the skins feature below.
 
 ### Alert indicator (Pokémon-style "!")
 

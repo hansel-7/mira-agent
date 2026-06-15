@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root { --ink: #0a0a0a; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 18px; background: #f4f4f4; color: var(--ink);
+      font-family: 'Courier New', monospace; font-size: 14px;
+    }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    h2 { font-size: 13px; margin: 18px 0 6px; text-transform: uppercase; letter-spacing: 1px; }
+    label { display: block; font-weight: bold; margin: 10px 0 4px; }
+    input, select {
+      width: 100%; font-family: inherit; font-size: 14px; padding: 8px 10px;
+      border: 3px solid var(--ink); background: #fff; outline: none;
+    }
+    input:focus, select:focus { box-shadow: 3px 3px 0 rgba(0,0,0,.4); }
+    .err { color: #b00020; font-weight: bold; min-height: 18px; margin-top: 8px; }
+    .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+    button {
+      font-family: inherit; font-size: 14px; font-weight: bold; padding: 8px 16px;
+      border: 3px solid var(--ink); background: #fff; cursor: pointer;
+      box-shadow: 3px 3px 0 rgba(0,0,0,.4);
+    }
+    button:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 rgba(0,0,0,.4); }
+    button.primary { background: var(--ink); color: #fff; }
+    /* list */
+    #list { border: 3px solid var(--ink); background: #fff; max-height: 170px; overflow-y: auto; }
+    .item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 2px solid #ddd; }
+    .item:last-child { border-bottom: none; }
+    .item .info { flex: 1; min-width: 0; }
+    .item .task { font-weight: bold; word-break: break-word; }
+    .item .when { font-size: 12px; color: #555; }
+    .badge { font-size: 11px; font-weight: bold; padding: 1px 6px; border: 2px solid var(--ink); border-radius: 2px; }
+    .empty { padding: 14px; color: #777; text-align: center; }
+    .del {
+      flex: none; padding: 4px 10px; box-shadow: 2px 2px 0 rgba(0,0,0,.4);
+    }
+    .two { display: flex; gap: 10px; }
+    .two > div { flex: 1; }
+  </style>
+</head>
+<body>
+  <h1>Reminders</h1>
+
+  <div id="list"></div>
+
+  <h2>New reminder</h2>
+  <label for="task">Task</label>
+  <input id="task" maxlength="120" placeholder="What should I remind you about?" />
+  <label for="deadline">Deadline</label>
+  <input id="deadline" type="datetime-local" />
+  <div class="two">
+    <div>
+      <label for="repeat">Repeat</label>
+      <select id="repeat">
+        <option value="once" selected>Once</option>
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+      </select>
+    </div>
+    <div>
+      <label for="before">Remind before</label>
+      <select id="before">
+        <option value="5">5 min</option>
+        <option value="10">10 min</option>
+        <option value="15" selected>15 min</option>
+        <option value="30">30 min</option>
+        <option value="60">1 hour</option>
+      </select>
+    </div>
+  </div>
+  <div class="err" id="err"></div>
+  <div class="row">
+    <button id="cancel">Close</button>
+    <button id="add" class="primary">Add</button>
+  </div>
+
+  <script>
+    const el = (id) => document.getElementById(id);
+    const pad = (n) => String(n).padStart(2, '0');
+
+    function defaultDeadline() {
+      const d = new Date(Date.now() + 60 * 60000);
+      d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5, 0, 0);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    el('deadline').value = defaultDeadline();
+    el('task').focus();
+
+    const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    function fmtWhen(r) {
+      const d = new Date(r.deadline);
+      const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      if (r.repeat === 'daily') return `Daily at ${time}`;
+      if (r.repeat === 'weekly') return `Weekly · ${WEEKDAY[d.getDay()]} ${time}`;
+      return `${WEEKDAY[d.getDay()]} ${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${time}`;
+    }
+
+    async function refresh() {
+      const items = await window.api.getReminders();
+      const list = el('list');
+      list.innerHTML = '';
+      if (!items.length) {
+        list.innerHTML = '<div class="empty">No reminders yet.</div>';
+        return;
+      }
+      items.sort((a, b) => a.deadline - b.deadline);
+      for (const r of items) {
+        const row = document.createElement('div');
+        row.className = 'item';
+        const info = document.createElement('div');
+        info.className = 'info';
+        const task = document.createElement('div');
+        task.className = 'task';
+        task.textContent = r.task;
+        const when = document.createElement('div');
+        when.className = 'when';
+        when.textContent = fmtWhen(r) + ` · ${r.remindBefore}m before`;
+        info.appendChild(task);
+        info.appendChild(when);
+        const del = document.createElement('button');
+        del.className = 'del';
+        del.textContent = 'Delete';
+        del.addEventListener('click', () => window.api.removeReminder(r.id));
+        row.appendChild(info);
+        row.appendChild(del);
+        list.appendChild(row);
+      }
+    }
+
+    function add() {
+      const task = el('task').value.trim();
+      const deadline = new Date(el('deadline').value).getTime();
+      if (!task) { el('err').textContent = 'Please name the task.'; return; }
+      if (!deadline || Number.isNaN(deadline)) { el('err').textContent = 'Pick a valid deadline.'; return; }
+      if (deadline <= Date.now()) { el('err').textContent = 'Deadline must be in the future.'; return; }
+      window.api.addReminder({
+        task,
+        deadline,
+        remindBefore: Number(el('before').value),
+        repeat: el('repeat').value,
+      });
+      // reset the form for the next entry; list refreshes via reminders:changed
+      el('task').value = '';
+      el('deadline').value = defaultDeadline();
+      el('err').textContent = '';
+      el('task').focus();
+    }
+
+    el('add').addEventListener('click', add);
+    el('cancel').addEventListener('click', () => window.api.close());
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') window.api.close();
+      if (e.key === 'Enter') add();
+    });
+
+    window.api.onRemindersChanged(refresh);
+    refresh();
+  </script>
+</body>
+</html>

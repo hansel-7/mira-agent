@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root { --ink: #0a0a0a; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 18px; background: #f4f4f4; color: var(--ink);
+      font-family: 'Courier New', monospace; font-size: 14px;
+    }
+    h1 { font-size: 18px; margin: 0 0 6px; }
+    p.sub { margin: 0 0 8px; font-size: 12px; color: #555; }
+    label { display: block; font-weight: bold; margin: 12px 0 4px; }
+    input {
+      width: 100%; font-family: inherit; font-size: 14px; padding: 8px 10px;
+      border: 3px solid var(--ink); background: #fff; outline: none;
+    }
+    input:focus { box-shadow: 3px 3px 0 rgba(0,0,0,.4); }
+    .err { color: #b00020; font-weight: bold; min-height: 18px; margin-top: 10px; }
+    .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+    button {
+      font-family: inherit; font-size: 14px; font-weight: bold; padding: 8px 16px;
+      border: 3px solid var(--ink); background: #fff; cursor: pointer;
+      box-shadow: 3px 3px 0 rgba(0,0,0,.4);
+    }
+    button:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 rgba(0,0,0,.4); }
+    button.primary { background: var(--ink); color: #fff; }
+  </style>
+</head>
+<body>
+  <h1>Start Pomodoro</h1>
+  <p class="sub">A timer clock will sit beside Mira. Right-click her to stop it.</p>
+  <label for="focus">Focus (minutes)</label>
+  <input id="focus" type="number" min="1" max="180" value="25" />
+  <label for="break">Short break (minutes)</label>
+  <input id="break" type="number" min="1" max="60" value="5" />
+  <label for="longBreak">Long break (minutes)</label>
+  <input id="longBreak" type="number" min="1" max="120" value="15" />
+  <label for="intervals">Focus sessions before a long break</label>
+  <input id="intervals" type="number" min="1" max="12" value="4" />
+  <div class="err" id="err"></div>
+  <div class="row">
+    <button id="cancel">Cancel</button>
+    <button id="start" class="primary">Start</button>
+  </div>
+  <script>
+    const el = (id) => document.getElementById(id);
+    el('focus').focus();
+
+    function num(id) { return Math.floor(Number(el(id).value)); }
+
+    function start() {
+      const cfg = { focus: num('focus'), break: num('break'), longBreak: num('longBreak'), intervals: num('intervals') };
+      for (const [k, v] of Object.entries(cfg)) {
+        if (!Number.isFinite(v) || v < 1) { el('err').textContent = 'All values must be at least 1.'; return; }
+      }
+      window.api.startPomodoro(cfg);
+      window.api.close();
+    }
+
+    el('start').addEventListener('click', start);
+    el('cancel').addEventListener('click', () => window.api.close());
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') window.api.close();
+      if (e.key === 'Enter') start();
+    });
+  </script>
+</body>
+</html>

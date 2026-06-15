@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, ipcMain } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -78,6 +78,7 @@ function createWindow() {
     skipTaskbar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      backgroundThrottling: false, // keep animating while a dialog/menu is focused
     },
   });
   win.loadFile('index.html');
@@ -118,6 +119,7 @@ ipcMain.on('drag-move', () => {
     dragOrigin.winX + (c.x - dragOrigin.curX),
     dragOrigin.winY + (c.y - dragOrigin.curY)
   );
+  positionClock(); // keep the pomodoro HUD beside Mira while she's dragged
 });
 ipcMain.on('drag-end', () => (dragOrigin = null));
 ipcMain.on('quit', () => app.quit());
@@ -186,6 +188,266 @@ ipcMain.on('profile:save', (_e, p) => {
   }
 });
 
+// ---------- right-click menu + form dialogs ----------
+const DIALOG_SIZE = {
+  profile: { width: 380, height: 470 },
+  reminders: { width: 400, height: 580 },
+  pomodoro: { width: 380, height: 470 },
+};
+const dialogs = {}; // name -> BrowserWindow (one instance per dialog)
+function openDialog(name) {
+  if (dialogs[name] && !dialogs[name].isDestroyed()) {
+    dialogs[name].focus();
+    return;
+  }
+  const w = new BrowserWindow({
+    ...DIALOG_SIZE[name],
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    title: 'Mira',
+    alwaysOnTop: true,
+    webPreferences: { preload: path.join(__dirname, 'dialog-preload.js') },
+  });
+  w.setMenuBarVisibility(false);
+  w.loadFile(path.join(__dirname, 'dialogs', name + '.html'));
+  dialogs[name] = w;
+  w.on('closed', () => delete dialogs[name]);
+}
+ipcMain.on('dialog:close', (e) => {
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (w && !w.isDestroyed()) w.close();
+});
+
+// Mira speaks via her bubble (reminders firing, pomodoro phase changes)
+function notify(text) {
+  if (win && !win.isDestroyed()) win.webContents.send('notify', text);
+}
+
+// ---------- settings (userData/settings.json) ----------
+let settingsPath = null;
+let settings = { clockColor: 'auto' };
+function loadSettings() {
+  settingsPath = path.join(app.getPath('userData'), 'settings.json');
+  try {
+    settings = { ...settings, ...JSON.parse(fs.readFileSync(settingsPath, 'utf8')) };
+  } catch (e) { /* defaults */ }
+}
+function saveSettings() {
+  try {
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  } catch (err) {
+    console.error('settings save failed:', err.message);
+  }
+}
+function sendClockColor() {
+  if (clockWin && !clockWin.isDestroyed()) clockWin.webContents.send('color', settings.clockColor);
+}
+function setClockColor(c) {
+  settings.clockColor = c;
+  saveSettings();
+  sendClockColor();
+}
+
+// ---------- reminders (userData/reminders.json) ----------
+const MAX_DELAY = 2147483647; // setTimeout cap (~24.8 days)
+let remindersPath = null;
+let reminders = [];
+const reminderTimers = new Map(); // id -> [timeoutId, ...]
+
+const PERIOD = { daily: 86400000, weekly: 7 * 86400000 };
+function nextOccurrence(deadline, repeat) {
+  let d = deadline;
+  do { d += PERIOD[repeat]; } while (d <= Date.now());
+  return d; // roll forward to the next future occurrence (fixed-period; ignores DST shifts)
+}
+function saveReminders() {
+  try {
+    fs.mkdirSync(path.dirname(remindersPath), { recursive: true });
+    fs.writeFileSync(remindersPath, JSON.stringify(reminders, null, 2));
+  } catch (err) {
+    console.error('reminders save failed:', err.message);
+  }
+  const w = dialogs['reminders']; // live-refresh the manage list if it's open
+  if (w && !w.isDestroyed()) w.webContents.send('reminders:changed');
+}
+function clearReminderTimers(id) {
+  const t = reminderTimers.get(id);
+  if (t) { t.forEach(clearTimeout); reminderTimers.delete(id); }
+}
+function removeReminder(id) {
+  clearReminderTimers(id);
+  reminders = reminders.filter((r) => r.id !== id);
+  saveReminders();
+}
+function armReminder(r) {
+  clearReminderTimers(r.id);
+  const now = Date.now();
+  const timers = [];
+  const preAt = r.deadline - r.remindBefore * 60000;
+  if (preAt > now && preAt - now <= MAX_DELAY) {
+    timers.push(setTimeout(() => notify(`⏰ "${r.task}" is due in ${r.remindBefore} min.`), preAt - now));
+  }
+  const dueDelay = r.deadline - now;
+  if (dueDelay <= MAX_DELAY) {
+    timers.push(setTimeout(() => {
+      notify(`⏰ "${r.task}" is due now!`);
+      if (r.repeat && r.repeat !== 'once') {
+        r.deadline = nextOccurrence(r.deadline, r.repeat); // recurring: schedule next, keep it
+        saveReminders();
+        armReminder(r);
+      } else {
+        removeReminder(r.id);
+      }
+    }, Math.max(0, dueDelay)));
+  }
+  reminderTimers.set(r.id, timers);
+}
+function loadReminders() {
+  remindersPath = path.join(app.getPath('userData'), 'reminders.json');
+  try {
+    reminders = JSON.parse(fs.readFileSync(remindersPath, 'utf8'));
+  } catch (e) {
+    reminders = [];
+  }
+  // recurring: roll any missed ones forward; once: drop if its deadline passed
+  reminders = reminders.filter((r) => {
+    if (r.repeat && r.repeat !== 'once') {
+      if (r.deadline <= Date.now()) r.deadline = nextOccurrence(r.deadline, r.repeat);
+      return true;
+    }
+    return r.deadline > Date.now();
+  });
+  saveReminders();
+  reminders.forEach(armReminder);
+}
+ipcMain.on('reminder:add', (_e, r) => {
+  const rec = {
+    id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+    task: r.task,
+    deadline: r.deadline,
+    remindBefore: r.remindBefore,
+    repeat: r.repeat || 'once',
+  };
+  reminders.push(rec);
+  saveReminders();
+  armReminder(rec);
+});
+ipcMain.handle('reminders:get', () => reminders);
+ipcMain.on('reminder:remove', (_e, id) => removeReminder(id));
+
+// ---------- pomodoro (timer state machine + HUD clock window) ----------
+let pomo = { running: false };
+let pomoTimer = null;
+let clockWin = null;
+
+function positionClock() {
+  if (!clockWin || clockWin.isDestroyed() || !win || win.isDestroyed()) return;
+  const b = win.getBounds();
+  const cw = clockWin.getBounds();
+  const catRight = b.x + Math.round(b.width / 2 + (SPRITE * scale) / 2);
+  const catCy = b.y + BUBBLE_H + Math.round((SPRITE * scale) / 2);
+  clockWin.setPosition(catRight + 6, catCy - Math.round(cw.height / 2));
+}
+function createClock() {
+  clockWin = new BrowserWindow({
+    width: 132,
+    height: 76,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    hasShadow: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'clock-preload.js'),
+      backgroundThrottling: false, // never focused -> would otherwise freeze
+    },
+  });
+  clockWin.setIgnoreMouseEvents(true); // pure HUD, never grabs clicks
+  clockWin.loadFile(path.join(__dirname, 'clock.html'));
+  clockWin.webContents.once('did-finish-load', () => { sendTick(); sendClockColor(); });
+  clockWin.on('closed', () => (clockWin = null));
+  positionClock();
+}
+function sendTick() {
+  if (clockWin && !clockWin.isDestroyed()) {
+    clockWin.webContents.send('tick', { phase: pomo.phase, remaining: pomo.remaining });
+  }
+}
+function enterPhase(phase) {
+  pomo.phase = phase;
+  const mins = phase === 'focus' ? pomo.cfg.focus : phase === 'long' ? pomo.cfg.longBreak : pomo.cfg.break;
+  pomo.remaining = mins * 60;
+  notify(phase === 'focus' ? '🍅 Focus time — let\'s go!' : phase === 'long' ? '🌴 Long break!' : '☕ Break time!');
+  sendTick();
+}
+function pomoStep() {
+  if (!pomo.running) return;
+  pomo.remaining--;
+  if (pomo.remaining <= 0) {
+    if (pomo.phase === 'focus') {
+      pomo.done++;
+      enterPhase(pomo.done % pomo.cfg.intervals === 0 ? 'long' : 'break');
+    } else {
+      enterPhase('focus');
+    }
+  } else {
+    sendTick();
+  }
+}
+function startPomodoro(cfg) {
+  stopPomodoro();
+  pomo = { running: true, cfg, done: 0, phase: 'focus', remaining: cfg.focus * 60 };
+  createClock();
+  notify('🍅 Focus time — let\'s go!');
+  pomoTimer = setInterval(pomoStep, 1000);
+}
+function stopPomodoro() {
+  if (pomoTimer) { clearInterval(pomoTimer); pomoTimer = null; }
+  if (clockWin && !clockWin.isDestroyed()) clockWin.close();
+  clockWin = null;
+  pomo = { running: false };
+}
+ipcMain.on('pomodoro:start', (_e, cfg) => startPomodoro(cfg));
+
+const CLOCK_COLORS = [
+  { label: 'Auto (by phase)', value: 'auto' },
+  { label: 'White', value: '#ffffff' },
+  { label: 'Yellow', value: '#ffe14d' },
+  { label: 'Pink', value: '#ff8ad1' },
+  { label: 'Cyan', value: '#5cd6ff' },
+  { label: 'Green', value: '#4dd07a' },
+  { label: 'Orange', value: '#ff9f43' },
+];
+function buildMenu() {
+  const items = [{ label: 'Reminders…', click: () => openDialog('reminders') }];
+  items.push(
+    pomo.running
+      ? { label: 'Stop Pomodoro', click: stopPomodoro }
+      : { label: 'Start Pomodoro…', click: () => openDialog('pomodoro') }
+  );
+  items.push({
+    label: 'Timer color',
+    submenu: CLOCK_COLORS.map((c) => ({
+      label: c.label,
+      type: 'radio',
+      checked: settings.clockColor === c.value,
+      click: () => setClockColor(c.value),
+    })),
+  });
+  items.push({ label: 'Edit profile…', click: () => openDialog('profile') });
+  items.push({ type: 'separator' });
+  items.push({ label: 'Quit Mira', click: () => app.quit() });
+  return Menu.buildFromTemplate(items);
+}
+ipcMain.on('show-menu', () => {
+  if (win && !win.isDestroyed()) buildMenu().popup({ window: win });
+});
+
 // renderer-controlled click-through (hover over cat/bubble/input = interactive)
 ipcMain.on('set-ignore', (_e, ignore) => {
   if (!win || win.isDestroyed()) return;
@@ -207,10 +469,13 @@ ipcMain.on('resize', (_e, dir) => {
     height: winH(),
   });
   sendLayout();
+  positionClock(); // re-anchor the pomodoro HUD after a size change
 });
 
 app.whenReady().then(() => {
   loadProfile();
+  loadReminders();
+  loadSettings();
   createWindow();
   if (uIOhook) {
     uIOhook.on('keydown', () => {
@@ -221,5 +486,7 @@ app.whenReady().then(() => {
 });
 app.on('will-quit', () => {
   if (uIOhook) uIOhook.stop();
+  if (pomoTimer) clearInterval(pomoTimer);
+  reminderTimers.forEach((timers) => timers.forEach(clearTimeout));
 });
 app.on('window-all-closed', () => app.quit());

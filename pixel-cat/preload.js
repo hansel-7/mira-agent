@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('catAPI', {
   onChatChunk: (cb) => ipcRenderer.on('chat-chunk', (_e, d) => cb(d)),
   getProfile: () => ipcRenderer.invoke('profile:get'),
   saveProfile: (p) => ipcRenderer.send('profile:save', p),
+  showMenu: () => ipcRenderer.send('show-menu'),
+  onNotify: (cb) => ipcRenderer.on('notify', (_e, text) => cb(text)),
   onLayout: (cb) => ipcRenderer.on('layout', (_e, l) => cb(l)),
   dragStart: () => ipcRenderer.send('drag-start'),
   dragMove: () => ipcRenderer.send('drag-move'),
