@@ -53,7 +53,7 @@ The agent runs as a container (`Dockerfile` → port 8080, `/health` check). Bui
 
 ## The desktop pet
 
-A transparent always-on-top pixel cat that chats with the agent and layers on productivity tools — reminders (one-off/daily/weekly), a Pomodoro HUD, and a tasks+subtasks checklist with progress bars — several creatable by just talking to her. Full details, controls, and architecture: [`pixel-cat/README.md`](pixel-cat/README.md).
+A transparent always-on-top pixel cat that chats with the agent (with text or images) and layers on productivity tools — reminders (one-off/daily/weekly), a Pomodoro HUD, and a tasks+subtasks checklist with progress bars — several creatable by just talking to her. Full details, controls, and architecture: [`pixel-cat/README.md`](pixel-cat/README.md).
 
 ```bash
 cd pixel-cat
@@ -74,4 +74,4 @@ The desktop pet keeps its own per-user state (profile, reminders, tasks, setting
 
 ## Status
 
-Built for the VNG GreenNode Claw-a-thon 2026. The agent is deployed and the desktop pet connects to it; packaging the pet as a distributable `.exe` (electron-builder) is in progress — see the pixel-cat README's roadmap.
+Built for the VNG GreenNode Claw-a-thon 2026. The agent is deployed and the desktop pet connects to it; a local unpacked `.exe` build works (see the pixel-cat README's **Packaging** notes), with a signed single-file installer still to come.

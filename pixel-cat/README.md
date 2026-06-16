@@ -1,6 +1,6 @@
 # pixel-cat
 
-Mira — a Comnyang-style desktop pet: black pixel cat with an idle rig (blink, ear flicks, tail sway, eye-follow), a popcat yapping animation while she "speaks", and a typing reaction driven by global keystrokes.
+Mira — an AI desktop pet: black pixel cat with an idle rig (blink, ear flicks, tail sway, eye-follow), a popcat yapping animation while she "speaks", and a typing reaction driven by global keystrokes.
 
 ## Run
 
@@ -14,19 +14,19 @@ npm start
 
 The cat appears near the bottom-right of your screen.
 
-- **Eyes + head follow** your mouse anywhere on screen
-- **Click** the cat to open the chat input — it chats with the deployed Mira agent (URL in `config.json`; point it at `http://localhost:8080` to use a local `python app.py`); while the reply streams in, it plays the popcat yap, then holds the closed-mouth frame for 2s before returning to idle
-- **Type anywhere** (any app) and the cat hammers its keyboard; each keystroke alternates the paw frames. Yapping takes priority over typing
-- **Overheat** — sustained fast typing gradually reddens the cat on a gradient (heat builds per keystroke, cools when you stop); a red `source-atop` overlay tints the silhouette, scaling with heat
-- **Drag** the cat to move it, **scroll** on it to resize
-- **Double-click** to quit
-- **Right-click** for a menu: Checklist…, Reminders…, Start/Stop Pomodoro…, Timer color ▸, Edit profile…, Quit
-- **First run** — Mira runs a scripted onboarding (name/department/hobbies/behaviour) then a quick feature tour (Enter/click to advance, Esc to skip); returning users skip both
-- **Reminders** — one-off, daily, or weekly; the Reminders… window lists/adds/deletes them and Mira pops a bubble at the remind-before time and at the deadline (one-offs auto-remove)
-- **Checklist** — tasks with subtasks, a per-task progress bar and deadline (overdue styling); the Checklist… window adds/checks/deletes; Mira can read the list back in chat
-- **Pomodoro** — set focus/break/long-break/intervals; a small transparent timer HUD sits above Mira's head (follows her when dragged/resized, bubble lifts to clear it) and she announces each phase; menu flips to Stop Pomodoro
-- **Talk to create** — "remind me to submit the report at 5pm tomorrow" or "create a Financial Model task with subtasks revenue, costs, valuation due Friday" creates the reminder/task straight from chat (Mira can also generate the subtasks); see Architecture for how
-- The window is larger than the cat (room for the speech bubble + input) but is click-through everywhere except the cat and the chat UI
+## Features
+
+- **Idle presence** — eyes and head follow your cursor anywhere on screen; periodic blinks, ear flicks, tail sway, whisker twitches. Drag to move, scroll to resize, double-click to quit. Always-on-top and click-through except over the cat and chat UI.
+- **Chat** — click the cat to open the input and chat with the deployed Mira agent (URL in `config.json`; point it at `http://localhost:8080` for a local `python app.py`). Replies stream into a speech bubble while she does the popcat yap, then settle back to idle.
+- **Image input** — attach an image with the 📎 button or by pasting (Ctrl+V); it's downscaled and sent so Mira can describe / answer questions about it.
+- **Typing reaction** — type in any app and the cat hammers a keyboard; yapping takes priority while she's replying.
+- **Overheat** — sustained fast typing gradually reddens the cat on a gradient; it cools back down when you stop.
+- **Reminders** — one-off, daily, or weekly. The Reminders… window lists/adds/deletes them; Mira pops a bubble at the remind-before time and at the deadline (one-offs auto-remove, recurring roll forward across restarts).
+- **Checklist** — tasks with subtasks, a per-task progress bar, and deadlines (overdue styling). The Checklist… window adds/checks/deletes; Mira can read the list back in chat.
+- **Pomodoro** — set focus/break/long-break/intervals; a small timer HUD sits above Mira's head (follows her, bubble lifts to clear it) and she announces each phase. Timer colour is configurable.
+- **Talk to create** — "remind me to submit the report at 5pm tomorrow" or "create a Financial Model task with subtasks revenue, costs, valuation due Friday" creates the reminder/task straight from chat; Mira can also generate the subtasks for you.
+- **Right-click menu** — Checklist…, Reminders…, Start/Stop Pomodoro…, Timer color ▸, Edit profile…, Quit.
+- **Personalized** — a first-run onboarding (name/department/hobbies/behaviour) plus a quick feature tour; your profile personalizes replies and is editable via Edit profile…. Returning users skip onboarding.
 
 ## Architecture
 
@@ -55,44 +55,6 @@ The cat appears near the bottom-right of your screen.
 - Typing decay: the `450`ms window in the `onKey` handler
 - Overheat feel: `HEAT_GAIN` (per-keystroke ramp), `HEAT_COOL` (cooldown/sec), `HEAT_MAX_ALPHA` (red intensity at full heat) in `index.html`. Red reaches full only under sustained fast typing of roughly `HEAT_COOL/HEAT_GAIN` keys/sec (~9/sec at defaults); casual typing drains before it builds up
 
-## Roadmap
+## Packaging
 
-### Personalization (onboarding + profile) — implemented
-
-First-run experience that personalizes Mira per user.
-
-1. **Onboarding sequence** — on first launch (no profile), Mira runs a *scripted* Q&A through the chat UI (name → department → hobbies → behaviour), one question per bubble, advancing on Enter (`QUESTIONS` + `handleAnswer` in `index.html`). It can't be dismissed mid-flow (guarded `closeChat`/Escape/blur/click). Scripted, not LLM-driven — deterministic, no token cost.
-2. **Profile file** — raw answers saved to `profile.json` in `app.getPath('userData')` (`%APPDATA%/Mira/`, since `main.js` calls `app.setName('Mira')`), **not** the app folder. The packaged .exe bundles the app read-only (asar), so runtime-writable data must live in `userData`. Distinction to keep: `config.json` = bundled/read-only (agent URL); `profile.json` = runtime/writable/per-user. Only raw answers are stored; the personalization sentence is derived at request time (no stale copy).
-3. **Personalized chat** — the agent is stateless/remote and can't read the local file, so context is injected client-side: `main.js` builds a `{role:"system"}` message from the profile (`profileSystemMessage()`) and **prepends it to the history of every `/chat` request** — no backend change. (If a model ever mishandles two system messages, the alternative is a `userContext` field that `app.py` merges into one prompt; would need a redeploy.)
-
-Profile is editable via the right-click **Edit profile…** dialog. After onboarding, first-run users get a scripted feature tour (`INTRO` in `index.html`).
-
-### Right-click menu — implemented
-
-Native context menu (`Menu.buildFromTemplate` + `popup()`) via a `contextmenu` listener → IPC → main. Items: Reminders…, Start/Stop Pomodoro…, Timer color ▸, Edit profile…, Quit. Form dialogs live in `dialogs/`; see the Architecture section. Reminders support once/daily/weekly with a manage list; Pomodoro drives the HUD clock window. A **Skin ▸** entry will be added with the skins feature below.
-
-### Alert indicator (Pokémon-style "!")
-
-A Pokémon-style exclamation-mark bubble that pops above Mira's head when a task reminder fires (the NPC "!" spotting effect) — a quick attention-grab before/with the reminder bubble.
-
-- **Sprite:** hand-drawn, *pending* (to be added). Likely a tiny 2–3 frame pop-in sheet, drawn over Mira's head independent of the body skin (so it works across skins).
-- **Render:** draw it above the cat in the reserved bubble area, with a short pop + bounce then either auto-dismiss or hold until acknowledged. Composites on top regardless of current state (idle/typing/speaking).
-- **Trigger:** fired by the reminders feature (right-click menu); could also signal other "Mira wants your attention" events later.
-
-### Skins (swappable sprite sets)
-
-Let users replace the default black cat with other sprite sets. Decided approach: **a per-skin manifest with two modes**, because the three current sprite systems aren't uniform and found art won't match the bespoke idle rig.
-
-- **Two modes.** `mode: "rig"` = the current default Mira (layered `base` + patch atlas + `rig-meta.json`, dynamic pupils, eye-follow). `mode: "frames"` = simple frame-sheet animations (idle/talk/type loops) — this is what sprites found online actually look like, and the realistic target for user skins.
-- **Manifest** (`skin.json` per skin folder) declares mode, native frame size, and an animation table (`{ file, frames, fps, loop }`) mapping the renderer's states (idle / speaking / typing) to sheets. Generalize the existing draw-priority loop (speaking > typing > idle) to be manifest-driven; keep the hardcoded Mira as the `rig` special case.
-- **Storage** — bundled default skins in the app (read-only asar) + user-dropped skins in `%APPDATA%/Mira/skins/` (writable), same split as the profile file. Selection saved to settings, chosen via the right-click **Skin ▸** submenu.
-- **Free / degrades:** overheat tint works on any skin automatically (it's a composite over whatever's drawn). Eye-follow does **not** carry to `frames` skins (fixed art) — graceful, expected downgrade. Per-skin native size handles mixed resolutions.
-- **Open decision (deferred):** whether non-default skins need full rig interactivity (eye-follow) — that requires rig authoring per skin, which found art won't provide. Defaulting to frame animation unless revisited.
-
-Build effort ~1 day (the draw-loop refactor); not started — revisit after the personalization + right-click features land.
-
-### Other
-
-Mochi drag stretch, reminders/Pomodoro behaviors.
-
-**Distribution:** local `--dir` build works (`npm run pack`; outputs `dist/win-unpacked/Mira.exe`). Remaining: the single-file installer/portable (`npm run dist`) and a GitHub Actions release workflow. Notes — `asarUnpack` for the `uiohook-napi` native module is configured and verified; `npmRebuild: false` (N-API binary is ABI-stable); build from a path **without `&`** (the `Tools & Scripts` path breaks the toolchain); local Windows builds need a workaround for electron-builder's `winCodeSign` extraction (macOS symlinks fail without admin/Developer Mode) — a CI Windows runner avoids this.
+Local unpacked build works: `npm run pack` → `dist/win-unpacked/Mira.exe` (run from a path **without** `&`). `asarUnpack` for the `uiohook-napi` native module is configured, and `npmRebuild: false` (the N-API binary is ABI-stable). Single-file installer (`npm run dist`) and a release workflow are not set up yet.

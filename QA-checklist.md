@@ -151,7 +151,7 @@ The pet talks to the deployed agent over `POST /chat` (SSE). Quick checks:
 
 # Known gaps / not yet implemented
 
-- **Pokémon-style "!" alert** for reminders — planned, sprite pending (see pixel-cat roadmap).
+- **Pokémon-style "!" alert** for reminders — planned, sprite pending.
 - **Skins** (swappable sprite sets) — planned, not started.
 - **Distributable .exe** — local `--dir` build works; signed installer + CI not done.
 
