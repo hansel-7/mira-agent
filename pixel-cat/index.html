@@ -57,8 +57,22 @@
       width: min(400px, 94%);
       display: none;
     }
+    #inputRow { display: flex; gap: 6px; }
+    #attach {
+      flex: none;
+      background: #0a0a0a;
+      border: 3px solid #fff;
+      color: #fff;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0 11px;
+      cursor: pointer;
+      box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+    }
+    #attach:hover { background: #222; }
     #chat {
-      width: 100%;
+      flex: 1;
+      min-width: 0;
       box-sizing: border-box;
       background: #0a0a0a;
       border: 3px solid #fff;
@@ -71,12 +85,33 @@
       box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
     }
     #chat::placeholder { color: #888; }
+    #imgChip {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      background: #0a0a0a;
+      border: 3px solid #fff;
+      padding: 6px 8px;
+      box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+    }
+    #imgChip.show { display: flex; }
+    #imgChip img { width: 40px; height: 40px; object-fit: cover; border: 2px solid #fff; }
+    #imgChip .label { flex: 1; color: #fff; font-family: 'Courier New', monospace; font-size: 12px; font-weight: bold; }
+    #imgChip .rm { color: #fff; cursor: pointer; font-weight: bold; padding: 0 4px; font-size: 16px; }
   </style>
 </head>
 <body>
   <div id="bubble"><div id="bubbleText"></div></div>
   <canvas id="cat"></canvas>
-  <div id="inputWrap"><input id="chat" placeholder="Say something to Mira..." /></div>
+  <div id="inputWrap">
+    <div id="imgChip"><img id="imgThumb" alt="" /><span class="label">Image attached</span><span class="rm" id="imgRemove">×</span></div>
+    <div id="inputRow">
+      <button id="attach" title="Attach image">📎</button>
+      <input id="chat" placeholder="Say something to Mira..." />
+    </div>
+    <input type="file" id="file" accept="image/*" style="display:none" />
+  </div>
   <script>
     const SPRITE = 80;
 
@@ -319,6 +354,7 @@
       chatOpen = false;
       inputWrap.style.display = 'none';
       chat.value = '';
+      clearPendingImage();
       bubble.style.display = 'none';
     }
 
@@ -536,6 +572,60 @@
       say(`That's the tour — ask me anything, ${answers.name}! 🐾`);
     }
 
+    // ---------- image attach (paste / file picker) ----------
+    const attachBtn = document.getElementById('attach');
+    const fileInput = document.getElementById('file');
+    const imgChip = document.getElementById('imgChip');
+    const imgThumb = document.getElementById('imgThumb');
+    const imgRemove = document.getElementById('imgRemove');
+    let pendingImage = null; // downscaled JPEG data URL, or null
+
+    // shrink to a sane size before sending (keeps requests small, helps the model)
+    function downscaleDataUrl(dataUrl, maxDim, cb) {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        try { cb(c.toDataURL('image/jpeg', 0.85)); } catch (e) { cb(dataUrl); }
+      };
+      img.onerror = () => cb(dataUrl);
+      img.src = dataUrl;
+    }
+    function setPendingImage(dataUrl) {
+      downscaleDataUrl(dataUrl, 1024, (small) => {
+        pendingImage = small;
+        imgThumb.src = small;
+        imgChip.classList.add('show');
+        chat.focus();
+      });
+    }
+    function clearPendingImage() {
+      pendingImage = null;
+      imgThumb.src = '';
+      imgChip.classList.remove('show');
+    }
+    function readFileToImage(file) {
+      if (!file || !file.type || !file.type.startsWith('image/')) return;
+      const r = new FileReader();
+      r.onload = (e) => setPendingImage(e.target.result);
+      r.readAsDataURL(file);
+    }
+    attachBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) readFileToImage(fileInput.files[0]);
+      fileInput.value = '';
+    });
+    imgRemove.addEventListener('click', clearPendingImage);
+    window.addEventListener('paste', (e) => {
+      if (!chatOpen || onboarding || intro) return;
+      const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
+      if (item) { readFileToImage(item.getAsFile()); e.preventDefault(); }
+    });
+
     chat.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (intro) { endIntro(); return; } // Esc skips the tour
@@ -544,11 +634,20 @@
       }
       if (e.key === 'Enter') {
         if (intro) { e.preventDefault(); advanceIntro(); return; }
-        if (!chat.value.trim()) return;
-        const q = chat.value.trim();
+        const text = chat.value.trim();
+        if (onboarding) {
+          if (!text) return;
+          chat.value = '';
+          handleAnswer(text);
+          return;
+        }
+        if (!text && !pendingImage) return; // allow image-only messages
         chat.value = '';
-        if (onboarding) { handleAnswer(q); return; }
-        history.push({ role: 'user', content: q });
+        const content = pendingImage
+          ? [{ type: 'image_url', image_url: { url: pendingImage } }, { type: 'text', text }]
+          : text;
+        clearPendingImage();
+        history.push({ role: 'user', content });
         if (history.length > 30) history.splice(0, history.length - 30);
         startSpeaking();
         window.catAPI.chatSend({ id: ++reqId, history });
