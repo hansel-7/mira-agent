@@ -6,11 +6,42 @@ const fs = require('fs');
 // the same %APPDATA%/Mira folder in dev and in the packaged .exe.
 app.setName('Mira');
 
-let agentUrl = 'http://localhost:8080';
+const DEFAULT_AGENT_URL = 'http://localhost:8080';
+let bundledAgentUrl = DEFAULT_AGENT_URL;
+let agentUrl = DEFAULT_AGENT_URL;
 try {
-  agentUrl = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8')).agentUrl;
+  const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
+  if (typeof cfg.agentUrl === 'string' && cfg.agentUrl.trim()) {
+    bundledAgentUrl = cfg.agentUrl.trim();
+    agentUrl = bundledAgentUrl;
+  }
 } catch (e) {
-  console.error('config.json missing/invalid, falling back to', agentUrl);
+  console.error('bundled config.json missing/invalid, falling back to', agentUrl);
+}
+
+// Runtime override: bundled config is read-only in packaged builds, so power users
+// can point Mira at another agent by editing %APPDATA%/Mira/config.json.
+let userConfigPath = null;
+function loadUserConfig() {
+  userConfigPath = path.join(app.getPath('userData'), 'config.json');
+  try {
+    const cfg = JSON.parse(fs.readFileSync(userConfigPath, 'utf8'));
+    if (typeof cfg.agentUrl === 'string' && cfg.agentUrl.trim()) {
+      agentUrl = cfg.agentUrl.trim();
+    }
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      console.error('user config.json invalid, using bundled endpoint:', e.message);
+    } else {
+      try {
+        fs.mkdirSync(path.dirname(userConfigPath), { recursive: true });
+        fs.writeFileSync(userConfigPath, JSON.stringify({ agentUrl: bundledAgentUrl }, null, 2));
+      } catch (err) {
+        console.error('user config save failed:', err.message);
+      }
+    }
+  }
+  agentUrl = agentUrl.replace(/\/+$/, '');
 }
 
 // per-user profile (onboarding answers) — lives only in userData, never bundled.
@@ -580,6 +611,7 @@ ipcMain.on('resize', (_e, dir) => {
 });
 
 app.whenReady().then(() => {
+  loadUserConfig();
   loadProfile();
   loadReminders();
   loadTasks();

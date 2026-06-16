@@ -17,7 +17,7 @@ The cat appears near the bottom-right of your screen.
 ## Features
 
 - **Idle presence** — eyes and head follow your cursor anywhere on screen; periodic blinks, ear flicks, tail sway, whisker twitches. Drag to move, scroll to resize, double-click to quit. Always-on-top and click-through except over the cat and chat UI.
-- **Chat** — click the cat to open the input and chat with the deployed Mira agent (URL in `config.json`; point it at `http://localhost:8080` for a local `python app.py`). Replies stream into a speech bubble while she does the popcat yap, then settle back to idle.
+- **Chat** — click the cat to open the input and chat with the deployed Mira agent (default URL in bundled `config.json`; override it in `%APPDATA%/Mira/config.json`, or point it at `http://localhost:8080` for a local `python app.py`). Replies stream into a speech bubble while she does the popcat yap, then settle back to idle.
 - **Image input** — attach an image with the 📎 button or by pasting (Ctrl+V); it's downscaled and sent so Mira can describe / answer questions about it.
 - **Typing reaction** — type in any app and the cat hammers a keyboard; yapping takes priority while she's replying.
 - **Overheat** — sustained fast typing gradually reddens the cat on a gradient; it cools back down when you stop.
@@ -33,7 +33,7 @@ The cat appears near the bottom-right of your screen.
 - `main.js` — transparent always-on-top frameless window; polls global cursor every 50ms; global key hook via `uiohook-napi` (fails soft if unavailable); manual window dragging, resize, and click-through over IPC; relays chat to the agent (`POST /chat`, SSE) and streams chunks to the renderer — the `file://` renderer can't call the endpoint itself (no CORS on the backend)
 - `preload.js` — exposes `catAPI` (cursor/key/layout events, drag, resize, quit, menu, profile, notify)
 - Right-click menu is built in `main.js` and popped natively; menu items that need input open small framed form windows in `dialogs/` (`profile.html`, `reminders.html`, `pomodoro.html`, `checklist.html`) via the shared `dialog-preload.js`. The Pomodoro timer HUD is a separate transparent click-through window (`clock.html` + `clock-preload.js`) positioned above Mira. (Dialog scripts that alias `window.api` must run in an IIFE — a top-level `const api` collides with the non-configurable global the bridge exposes.)
-- State in `userData` (`%APPDATA%/Mira/`): `profile.json` (onboarding), `reminders.json` (reminder engine — two `setTimeout`s each, recurring rolls forward), `tasks.json` (checklist), `settings.json` (clock colour). `backgroundThrottling: false` on the pet + clock windows so neither freezes when a dialog/menu is focused
+- State in `userData` (`%APPDATA%/Mira/`): `config.json` (agent endpoint override), `profile.json` (onboarding), `reminders.json` (reminder engine — two `setTimeout`s each, recurring rolls forward), `tasks.json` (checklist), `settings.json` (clock colour). `backgroundThrottling: false` on the pet + clock windows so neither freezes when a dialog/menu is focused
 - **Natural-language create** — `main.js` injects one client-side system message into every `/chat` request (profile + current local time + reminder/task protocols + a read-only checklist summary), so Mira can create reminders/tasks and answer questions about them with no backend change. When asked, the agent appends a hidden `[[REMINDER]]{…}` or `[[TASK]]{…}` block; the renderer strips it from the bubble mid-stream and dispatches to the local engines. Bad/past/malformed data is dropped client-side
 - `index.html` — all rendering and behavior. Draw priority: speaking (yap frames) > typing (keyboard frames) > idle rig
   - Idle: composites `assets/mira_base.png` + patch regions from `assets/mira_rig.png` (ears/tail/whiskers/mouth/blink, per `assets/rig-meta.json`) on an 80×80 buffer; pupils drawn dynamically to track the cursor; upscales nearest-neighbor with a slight body lean
@@ -57,4 +57,8 @@ The cat appears near the bottom-right of your screen.
 
 ## Packaging
 
-Local unpacked build works: `npm run pack` → `dist/win-unpacked/Mira.exe` (run from a path **without** `&`). `asarUnpack` for the `uiohook-napi` native module is configured, and `npmRebuild: false` (the N-API binary is ABI-stable). Single-file installer (`npm run dist`) and a release workflow are not set up yet.
+Portable Windows build: `npm run dist` → `dist/Mira-0.1.0-portable.exe` (run from a path **without** `&` for local builds). `asarUnpack` for the `uiohook-napi` native module is configured, and `npmRebuild: false` (the N-API binary is ABI-stable). The GitHub workflow builds the same portable `.exe` and attaches it to `v*` tag releases.
+
+## Credits
+
+- App icon: [Cat Footprint](https://icons8.com/icon/9603/cat-footprint) icon by [Icons8](https://icons8.com).

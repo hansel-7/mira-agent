@@ -130,7 +130,7 @@ Delete `%APPDATA%/Mira/profile.json` to re-trigger.
 
 ## 14. Packaging (optional — only if testing the .exe)
 
-- [ ] `npm run pack` / `npm run dist` produces a runnable build (from a path **without** `&`)
+- [ ] `npm run dist` produces a runnable portable `.exe` (from a path **without** `&` for local builds)
 - [ ] The packaged app launches and chats
 - [ ] **Typing reaction + overheat work in the packaged app** (confirms the `uiohook-napi` native module was unpacked)
 
@@ -143,7 +143,7 @@ The pet talks to the deployed agent over `POST /chat` (SSE). Quick checks:
 - [ ] Deployed DEFAULT endpoint `/health` returns ok over HTTPS
 - [ ] `/chat` streams a reply (`curl -N -X POST <url>/chat -H "Content-Type: application/json" -d '{"history":[{"role":"user","content":"hi"}]}'`)
 - [ ] **Cold start** — after idle (replicas → 0), the first request still succeeds (note the latency; the pet shows "…" meanwhile)
-- [ ] `pixel-cat/config.json` `agentUrl` points at the current endpoint
+- [ ] Bundled `pixel-cat/config.json` `agentUrl` points at the current endpoint; `%APPDATA%/Mira/config.json` can override it
 - [ ] Local fallback: setting `agentUrl` to `http://localhost:8080` with `python app.py` running also works
 - [ ] `.env` and secrets are not committed; no secrets echoed in replies/logs
 
@@ -153,7 +153,7 @@ The pet talks to the deployed agent over `POST /chat` (SSE). Quick checks:
 
 - **Pokémon-style "!" alert** for reminders — planned, sprite pending.
 - **Skins** (swappable sprite sets) — planned, not started.
-- **Distributable .exe** — local `--dir` build works; signed installer + CI not done.
+- **Signing / trust** — portable `.exe` is unsigned for now, so Windows may show SmartScreen warnings.
 
 ---
 

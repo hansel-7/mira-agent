@@ -45,11 +45,11 @@ python app.py        # serves on http://localhost:8080
 python chatbot.py
 ```
 
-Point the desktop pet at your local agent by setting `pixel-cat/config.json`'s `agentUrl` to `http://localhost:8080`.
+Point the desktop pet at your local agent by setting `agentUrl` in `%APPDATA%/Mira/config.json` to `http://localhost:8080`. The bundled `pixel-cat/config.json` is the default used for packaged releases; the per-user config overrides it after first launch.
 
 ### Deploy (GreenNode AgentBase)
 
-The agent runs as a container (`Dockerfile` → port 8080, `/health` check). Build and push the image, then create/update an AgentBase runtime; its `DEFAULT` endpoint URL goes in `pixel-cat/config.json` so the shipped desktop app reaches it. See the AgentBase skills under `greennode-agentbase-skills/` (cloned separately, gitignored) for the deploy/runtime commands.
+The agent runs as a container (`Dockerfile` → port 8080, `/health` check). Build and push the image, then create/update an AgentBase runtime; its `DEFAULT` endpoint URL goes in `pixel-cat/config.json` so the shipped desktop app reaches it by default. See the AgentBase skills under `greennode-agentbase-skills/` (cloned separately, gitignored) for the deploy/runtime commands.
 
 ## The desktop pet
 
@@ -71,7 +71,12 @@ Secrets live in a `.env` at the repo root (never committed — see `.gitignore`)
 | `GREENNODE_CLIENT_ID` / `GREENNODE_CLIENT_SECRET` | IAM credentials for AgentBase deployment |
 
 The desktop pet keeps its own per-user state (profile, reminders, tasks, settings) in `%APPDATA%/Mira/`, not in this repo.
+On first launch it also creates `%APPDATA%/Mira/config.json`; edit that file to point the packaged app at a different agent endpoint without rebuilding.
 
 ## Status
 
-Built for the VNG GreenNode Claw-a-thon 2026. The agent is deployed and the desktop pet connects to it; a local unpacked `.exe` build works (see the pixel-cat README's **Packaging** notes), with a signed single-file installer still to come.
+Built for the VNG GreenNode Claw-a-thon 2026. The agent is deployed and the desktop pet connects to it; packaging is focused on a portable Windows `.exe` release for GitHub, built locally or by the `Build Mira Portable EXE` workflow.
+
+## Credits
+
+- App icon: [Cat Footprint](https://icons8.com/icon/9603/cat-footprint) icon by [Icons8](https://icons8.com).
