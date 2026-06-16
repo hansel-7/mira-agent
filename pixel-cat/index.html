@@ -110,19 +110,30 @@
       });
 
     // ---------- layout (window = bubble area + cat + input area) ----------
+    let curLayout = { scale: 3, bubbleH: 270, inputH: 56 };
+    let pomoActive = false;   // pomodoro timer is shown above Mira's head
+    const CLOCK_CLEAR = 66;   // px to lift the bubble so it clears that timer
+    function bubbleBottomPx() {
+      return window.innerHeight - curLayout.bubbleH + 12 + (pomoActive ? CLOCK_CLEAR : 0);
+    }
     function applyLayout(l) {
+      curLayout = l;
       const size = SPRITE * l.scale;
       canvas.width = size;
       canvas.height = size;
       canvas.style.width = size + 'px';
       canvas.style.height = size + 'px';
       canvas.style.top = l.bubbleH + 'px';
-      bubble.style.bottom = (window.innerHeight - l.bubbleH + 12) + 'px';
+      bubble.style.bottom = bubbleBottomPx() + 'px';
       inputWrap.style.top = (l.bubbleH + size + 8) + 'px';
       ctx.imageSmoothingEnabled = false;
     }
     window.catAPI.onLayout(applyLayout);
-    applyLayout({ scale: 3, bubbleH: 150, inputH: 56 });
+    applyLayout({ scale: 3, bubbleH: 270, inputH: 56 });
+    window.catAPI.onPomoActive((v) => {
+      pomoActive = v;
+      bubble.style.bottom = bubbleBottomPx() + 'px';
+    });
 
     // ---------- layer states (populated from rig-meta neutrals once it loads) ----------
     const state = {};
@@ -314,7 +325,8 @@
     // ---------- agent chat (streamed from main over IPC) ----------
     const history = [];
     let reqId = 0;
-    let target = '';      // full reply received so far
+    let target = '';      // visible text typed into the bubble
+    let raw = '';         // full streamed reply (may carry a hidden [[REMINDER]] block)
     let printed = 0;      // chars typed into the bubble
     let streamDone = false;
     let printTimer = null;
@@ -326,6 +338,7 @@
       clearTimeout(printTimer);
       holdPop = false;
       target = '';
+      raw = '';
       printed = 0;
       streamDone = false;
       bubbleText.textContent = '...';
@@ -377,21 +390,83 @@
       notifyHideTimer = setTimeout(() => { if (!chatOpen) bubble.style.display = 'none'; }, 12000);
     });
 
+    // ---- parse optional action blocks the agent may append (reminders, tasks) ----
+    function createReminderFromChat(j) {
+      const task = String(j.task || '').trim().slice(0, 200);
+      const deadline = new Date(j.datetime).getTime();
+      const repeat = ['once', 'daily', 'weekly'].includes(j.repeat) ? j.repeat : 'once';
+      let remindBefore = Number(j.remindBefore);
+      if (!Number.isFinite(remindBefore) || remindBefore < 0) remindBefore = 15;
+      if (!task || !deadline || Number.isNaN(deadline) || deadline <= Date.now()) return;
+      window.catAPI.addReminder({ task, deadline, remindBefore, repeat });
+    }
+    function createTaskFromChat(j) {
+      const title = String(j.title || '').trim().slice(0, 200);
+      if (!title) return;
+      let deadline = null;
+      if (j.deadline) { const t = new Date(j.deadline).getTime(); if (Number.isFinite(t)) deadline = t; }
+      const subtasks = Array.isArray(j.subtasks)
+        ? j.subtasks.map((s) => String(s).trim()).filter(Boolean).slice(0, 30)
+        : [];
+      window.catAPI.createTask({ title, deadline, subtasks });
+    }
+    const MARKERS = [
+      { open: '[[REMINDER]]', close: '[[/REMINDER]]', run: createReminderFromChat },
+      { open: '[[TASK]]', close: '[[/TASK]]', run: createTaskFromChat },
+    ];
+    function firstMarker(s) {
+      let idx = -1;
+      for (const m of MARKERS) {
+        const i = s.indexOf(m.open);
+        if (i !== -1 && (idx === -1 || i < idx)) idx = i;
+      }
+      return idx;
+    }
+    // text safe to show mid-stream: before the first marker, holding back a trailing
+    // partial of any marker so "[[TAS…" never flashes in the bubble
+    function visibleSoFar(s) {
+      const i = firstMarker(s);
+      if (i !== -1) return s.slice(0, i);
+      let cut = s.length;
+      for (const m of MARKERS) {
+        for (let n = Math.min(m.open.length - 1, s.length); n > 0; n--) {
+          if (s.endsWith(m.open.slice(0, n))) { cut = Math.min(cut, s.length - n); break; }
+        }
+      }
+      return s.slice(0, cut);
+    }
+    function runMarkers(s) {
+      for (const m of MARKERS) {
+        let from = 0, o;
+        while ((o = s.indexOf(m.open, from)) !== -1) {
+          const c = s.indexOf(m.close, o);
+          const inner = c === -1 ? s.slice(o + m.open.length) : s.slice(o + m.open.length, c);
+          try { m.run(JSON.parse(inner.trim())); } catch (e) { /* ignore malformed block */ }
+          from = c === -1 ? s.length : c + m.close.length;
+        }
+      }
+    }
+
     window.catAPI.onChatChunk((d) => {
       if (d.id !== reqId) return; // chunk from an aborted request
       if (d.error) {
-        target += (target ? '\n' : '') + "Mrrp?! (can't reach my brain: " + d.error + ')';
+        raw += (raw ? '\n' : '') + "Mrrp?! (can't reach my brain: " + d.error + ')';
+        target = raw;
         streamDone = true;
         speaking = true; // yap out the error line
         return;
       }
       if (d.content) {
-        target += d.content;
+        raw += d.content;
+        target = visibleSoFar(raw); // keep any action block out of the bubble while streaming
         speaking = true; // first token arrived -> start yapping now
       }
       if (d.done) {
         streamDone = true;
+        const i = firstMarker(raw);
+        target = (i === -1 ? raw : raw.slice(0, i)).trimEnd();
         history.push({ role: 'assistant', content: target });
+        runMarkers(raw);
       }
     });
 
@@ -480,7 +555,8 @@
       }
     });
     window.addEventListener('blur', () => {
-      if (chatOpen) closeChat();
+      // only dismiss an idle input on blur — never a pending or visible reply bubble
+      if (chatOpen && bubble.style.display === 'none') closeChat();
     });
 
     // on first launch (no saved profile) kick off onboarding

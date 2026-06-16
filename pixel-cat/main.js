@@ -25,15 +25,42 @@ function loadProfile() {
     profile = null; // no profile yet -> renderer runs onboarding
   }
 }
-function profileSystemMessage() {
-  if (!profile) return null;
-  const bits = [];
-  if (profile.name) bits.push(`The user's name is ${profile.name}.`);
-  if (profile.department) bits.push(`They work in ${profile.department}.`);
-  if (profile.hobbies) bits.push(`Their hobbies/interests: ${profile.hobbies}.`);
-  if (profile.behavior) bits.push(`Preferred assistant tone/behaviour: ${profile.behavior}.`);
-  if (!bits.length) return null;
-  return { role: 'system', content: 'About the user you are chatting with — personalize accordingly. ' + bits.join(' ') };
+function localNowString() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const wd = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()];
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())} (${wd})`;
+}
+// One client-side system message injected into every chat request: profile +
+// current local time + the reminder-creation protocol (parsed back in the renderer).
+function injectedSystemMessage() {
+  const parts = [];
+  if (profile) {
+    const bits = [];
+    if (profile.name) bits.push(`Their name is ${profile.name}.`);
+    if (profile.department) bits.push(`They work in ${profile.department}.`);
+    if (profile.hobbies) bits.push(`Hobbies/interests: ${profile.hobbies}.`);
+    if (profile.behavior) bits.push(`Preferred tone/behaviour: ${profile.behavior}.`);
+    if (bits.length) parts.push('About the user (personalize accordingly): ' + bits.join(' '));
+  }
+  parts.push(`Current local time: ${localNowString()}. Resolve relative times like "tomorrow" or "in 2 hours" against this.`);
+  parts.push(tasksSummary());
+  parts.push(
+    'You can set reminders for the user. ONLY when they ask to be reminded of something or to set a reminder, do BOTH: ' +
+      '(1) reply in one short friendly sentence confirming the task and when; ' +
+      '(2) then on a new final line append exactly [[REMINDER]]{"task":"...","datetime":"YYYY-MM-DDTHH:MM","repeat":"once|daily|weekly","remindBefore":<minutes>}[[/REMINDER]] . ' +
+      'datetime is LOCAL time and the next occurrence; repeat must be one of once, daily, weekly; remindBefore is minutes to pre-warn (default 15, 0 for none). ' +
+      "If the requested schedule cannot be expressed as once/daily/weekly (e.g. monthly or weekdays-only), tell them you can't do that schedule yet and DO NOT append the block. " +
+      'Never output the reminder block during normal conversation.'
+  );
+  parts.push(
+    'You can also create checklist tasks (a task with subtasks). ONLY when the user asks to create/add a task, do BOTH: ' +
+      '(1) reply in one short friendly sentence confirming the task; ' +
+      '(2) then on a new final line append exactly [[TASK]]{"title":"...","deadline":"YYYY-MM-DDTHH:MM" or null,"subtasks":["...","..."]}[[/TASK]] . ' +
+      'deadline is LOCAL time, or null if none was given. subtasks is an array of short subtask titles: use the ones the user listed; if they ask you to generate/break it down, produce a sensible 3-6 step breakdown; use [] if none apply. ' +
+      'Never output the task block during normal conversation.'
+  );
+  return { role: 'system', content: parts.join('\n\n') };
 }
 
 // global key hook -> typing animation (fails soft if the native module won't load)
@@ -135,9 +162,8 @@ ipcMain.on('chat-send', async (_e, { id, history }) => {
     if (win && !win.isDestroyed()) win.webContents.send('chat-chunk', { id, ...payload });
   };
   try {
-    // prepend the user profile so every request is personalized (client-side injection)
-    const sys = profileSystemMessage();
-    const messages = sys ? [sys, ...history] : history;
+    // prepend profile + current time + reminder protocol (client-side injection)
+    const messages = [injectedSystemMessage(), ...history];
     const res = await fetch(agentUrl + '/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -193,6 +219,7 @@ const DIALOG_SIZE = {
   profile: { width: 380, height: 470 },
   reminders: { width: 400, height: 580 },
   pomodoro: { width: 380, height: 470 },
+  checklist: { width: 460, height: 640 },
 };
 const dialogs = {}; // name -> BrowserWindow (one instance per dialog)
 function openDialog(name) {
@@ -338,6 +365,81 @@ ipcMain.on('reminder:add', (_e, r) => {
 ipcMain.handle('reminders:get', () => reminders);
 ipcMain.on('reminder:remove', (_e, id) => removeReminder(id));
 
+// ---------- checklist / tasks (userData/tasks.json) ----------
+// task = { id, title, deadline (ms|null), subtasks: [{ id, title, done }] }
+let tasksPath = null;
+let tasks = [];
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+function loadTasks() {
+  tasksPath = path.join(app.getPath('userData'), 'tasks.json');
+  try {
+    tasks = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
+  } catch (e) {
+    tasks = [];
+  }
+}
+function saveTasks() {
+  try {
+    fs.mkdirSync(path.dirname(tasksPath), { recursive: true });
+    fs.writeFileSync(tasksPath, JSON.stringify(tasks, null, 2));
+  } catch (err) {
+    console.error('tasks save failed:', err.message);
+  }
+  const w = dialogs['checklist']; // live-refresh the checklist window if open
+  if (w && !w.isDestroyed()) w.webContents.send('tasks:changed');
+}
+function tasksSummary() {
+  if (!tasks.length) return 'The user has no tasks on their checklist right now.';
+  const lines = tasks.map((t) => {
+    const total = t.subtasks.length;
+    const done = t.subtasks.filter((s) => s.done).length;
+    const dl = t.deadline ? new Date(t.deadline).toLocaleString() : 'no deadline';
+    const subs = total ? ' [' + t.subtasks.map((s) => `${s.done ? 'done' : 'todo'}: ${s.title}`).join('; ') + ']' : '';
+    return `- ${t.title} (deadline ${dl}; ${done}/${total} subtasks done)${subs}`;
+  });
+  return "The user's checklist (answer questions about their tasks using this):\n" + lines.join('\n');
+}
+
+ipcMain.handle('tasks:get', () => tasks);
+ipcMain.on('task:add', (_e, { title, deadline }) => {
+  if (!title || !String(title).trim()) return;
+  tasks.push({ id: uid(), title: String(title).trim().slice(0, 200), deadline: deadline || null, subtasks: [] });
+  saveTasks();
+});
+ipcMain.on('task:remove', (_e, id) => {
+  tasks = tasks.filter((t) => t.id !== id);
+  saveTasks();
+});
+ipcMain.on('subtask:add', (_e, { taskId, title }) => {
+  const t = tasks.find((x) => x.id === taskId);
+  if (!t || !title || !String(title).trim()) return;
+  t.subtasks.push({ id: uid(), title: String(title).trim().slice(0, 200), done: false });
+  saveTasks();
+});
+ipcMain.on('subtask:remove', (_e, { taskId, subId }) => {
+  const t = tasks.find((x) => x.id === taskId);
+  if (!t) return;
+  t.subtasks = t.subtasks.filter((s) => s.id !== subId);
+  saveTasks();
+});
+ipcMain.on('subtask:toggle', (_e, { taskId, subId }) => {
+  const t = tasks.find((x) => x.id === taskId);
+  const s = t && t.subtasks.find((y) => y.id === subId);
+  if (s) { s.done = !s.done; saveTasks(); }
+});
+// atomic create (task + subtasks) — used by the NL "create a task…" chat path
+ipcMain.on('task:create', (_e, { title, deadline, subtasks }) => {
+  if (!title || !String(title).trim()) return;
+  const subs = (Array.isArray(subtasks) ? subtasks : [])
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+    .slice(0, 30)
+    .map((s) => ({ id: uid(), title: s.slice(0, 200), done: false }));
+  tasks.push({ id: uid(), title: String(title).trim().slice(0, 200), deadline: deadline || null, subtasks: subs });
+  saveTasks();
+});
+
 // ---------- pomodoro (timer state machine + HUD clock window) ----------
 let pomo = { running: false };
 let pomoTimer = null;
@@ -347,9 +449,9 @@ function positionClock() {
   if (!clockWin || clockWin.isDestroyed() || !win || win.isDestroyed()) return;
   const b = win.getBounds();
   const cw = clockWin.getBounds();
-  const catRight = b.x + Math.round(b.width / 2 + (SPRITE * scale) / 2);
-  const catCy = b.y + BUBBLE_H + Math.round((SPRITE * scale) / 2);
-  clockWin.setPosition(catRight + 6, catCy - Math.round(cw.height / 2));
+  const x = b.x + Math.round(b.width / 2 - cw.width / 2);
+  const catTop = b.y + BUBBLE_H;
+  clockWin.setPosition(x, catTop - cw.height + 16); // centered just above Mira's head
 }
 function createClock() {
   clockWin = new BrowserWindow({
@@ -403,6 +505,7 @@ function startPomodoro(cfg) {
   stopPomodoro();
   pomo = { running: true, cfg, done: 0, phase: 'focus', remaining: cfg.focus * 60 };
   createClock();
+  if (win && !win.isDestroyed()) win.webContents.send('pomo-active', true); // lift the bubble
   notify('🍅 Focus time — let\'s go!');
   pomoTimer = setInterval(pomoStep, 1000);
 }
@@ -411,6 +514,7 @@ function stopPomodoro() {
   if (clockWin && !clockWin.isDestroyed()) clockWin.close();
   clockWin = null;
   pomo = { running: false };
+  if (win && !win.isDestroyed()) win.webContents.send('pomo-active', false);
 }
 ipcMain.on('pomodoro:start', (_e, cfg) => startPomodoro(cfg));
 
@@ -424,7 +528,10 @@ const CLOCK_COLORS = [
   { label: 'Orange', value: '#ff9f43' },
 ];
 function buildMenu() {
-  const items = [{ label: 'Reminders…', click: () => openDialog('reminders') }];
+  const items = [
+    { label: 'Checklist…', click: () => openDialog('checklist') },
+    { label: 'Reminders…', click: () => openDialog('reminders') },
+  ];
   items.push(
     pomo.running
       ? { label: 'Stop Pomodoro', click: stopPomodoro }
@@ -475,6 +582,7 @@ ipcMain.on('resize', (_e, dir) => {
 app.whenReady().then(() => {
   loadProfile();
   loadReminders();
+  loadTasks();
   loadSettings();
   createWindow();
   if (uIOhook) {

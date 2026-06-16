@@ -20,18 +20,21 @@ The cat appears near the bottom-right of your screen.
 - **Overheat** — sustained fast typing gradually reddens the cat on a gradient (heat builds per keystroke, cools when you stop); a red `source-atop` overlay tints the silhouette, scaling with heat
 - **Drag** the cat to move it, **scroll** on it to resize
 - **Double-click** to quit
-- **Right-click** for a menu: Reminders…, Start/Stop Pomodoro…, Timer color ▸, Edit profile…, Quit
+- **Right-click** for a menu: Checklist…, Reminders…, Start/Stop Pomodoro…, Timer color ▸, Edit profile…, Quit
 - **First run** — Mira runs a scripted onboarding (name/department/hobbies/behaviour) then a quick feature tour (Enter/click to advance, Esc to skip); returning users skip both
 - **Reminders** — one-off, daily, or weekly; the Reminders… window lists/adds/deletes them and Mira pops a bubble at the remind-before time and at the deadline (one-offs auto-remove)
-- **Pomodoro** — set focus/break/long-break/intervals; a small transparent timer HUD sits beside Mira (follows her when dragged/resized) and she announces each phase; menu flips to Stop Pomodoro
+- **Checklist** — tasks with subtasks, a per-task progress bar and deadline (overdue styling); the Checklist… window adds/checks/deletes; Mira can read the list back in chat
+- **Pomodoro** — set focus/break/long-break/intervals; a small transparent timer HUD sits above Mira's head (follows her when dragged/resized, bubble lifts to clear it) and she announces each phase; menu flips to Stop Pomodoro
+- **Talk to create** — "remind me to submit the report at 5pm tomorrow" or "create a Financial Model task with subtasks revenue, costs, valuation due Friday" creates the reminder/task straight from chat (Mira can also generate the subtasks); see Architecture for how
 - The window is larger than the cat (room for the speech bubble + input) but is click-through everywhere except the cat and the chat UI
 
 ## Architecture
 
 - `main.js` — transparent always-on-top frameless window; polls global cursor every 50ms; global key hook via `uiohook-napi` (fails soft if unavailable); manual window dragging, resize, and click-through over IPC; relays chat to the agent (`POST /chat`, SSE) and streams chunks to the renderer — the `file://` renderer can't call the endpoint itself (no CORS on the backend)
 - `preload.js` — exposes `catAPI` (cursor/key/layout events, drag, resize, quit, menu, profile, notify)
-- Right-click menu is built in `main.js` and popped natively; menu items that need input open small framed form windows in `dialogs/` (`profile.html`, `reminders.html`, `pomodoro.html`) via the shared `dialog-preload.js`. The Pomodoro timer HUD is a separate transparent click-through window (`clock.html` + `clock-preload.js`) positioned beside Mira
-- State in `userData` (`%APPDATA%/Mira/`): `profile.json` (onboarding), `reminders.json` (reminder engine — two `setTimeout`s each, recurring rolls forward), `settings.json` (clock colour). `backgroundThrottling: false` on the pet + clock windows so neither freezes when a dialog/menu is focused
+- Right-click menu is built in `main.js` and popped natively; menu items that need input open small framed form windows in `dialogs/` (`profile.html`, `reminders.html`, `pomodoro.html`, `checklist.html`) via the shared `dialog-preload.js`. The Pomodoro timer HUD is a separate transparent click-through window (`clock.html` + `clock-preload.js`) positioned above Mira. (Dialog scripts that alias `window.api` must run in an IIFE — a top-level `const api` collides with the non-configurable global the bridge exposes.)
+- State in `userData` (`%APPDATA%/Mira/`): `profile.json` (onboarding), `reminders.json` (reminder engine — two `setTimeout`s each, recurring rolls forward), `tasks.json` (checklist), `settings.json` (clock colour). `backgroundThrottling: false` on the pet + clock windows so neither freezes when a dialog/menu is focused
+- **Natural-language create** — `main.js` injects one client-side system message into every `/chat` request (profile + current local time + reminder/task protocols + a read-only checklist summary), so Mira can create reminders/tasks and answer questions about them with no backend change. When asked, the agent appends a hidden `[[REMINDER]]{…}` or `[[TASK]]{…}` block; the renderer strips it from the bubble mid-stream and dispatches to the local engines. Bad/past/malformed data is dropped client-side
 - `index.html` — all rendering and behavior. Draw priority: speaking (yap frames) > typing (keyboard frames) > idle rig
   - Idle: composites `assets/mira_base.png` + patch regions from `assets/mira_rig.png` (ears/tail/whiskers/mouth/blink, per `assets/rig-meta.json`) on an 80×80 buffer; pupils drawn dynamically to track the cursor; upscales nearest-neighbor with a slight body lean
   - Speaking: draws `assets/mira_yapping.png` (2 frames @ 320×320, closed/pop) directly, alternating every 170ms

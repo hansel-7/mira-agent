@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root { --ink: #0a0a0a; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 18px; background: #f4f4f4; color: var(--ink);
+      font-family: 'Courier New', monospace; font-size: 14px;
+    }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    h2 { font-size: 13px; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: 1px; }
+    label { display: block; font-weight: bold; margin: 8px 0 4px; }
+    input {
+      width: 100%; font-family: inherit; font-size: 14px; padding: 8px 10px;
+      border: 3px solid var(--ink); background: #fff; outline: none;
+    }
+    input:focus { box-shadow: 3px 3px 0 rgba(0,0,0,.4); }
+    button {
+      font-family: inherit; font-size: 14px; font-weight: bold; padding: 8px 16px;
+      border: 3px solid var(--ink); background: #fff; cursor: pointer;
+      box-shadow: 3px 3px 0 rgba(0,0,0,.4);
+    }
+    button:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 rgba(0,0,0,.4); }
+    button.primary { background: var(--ink); color: #fff; }
+    .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+    .err { color: #b00020; font-weight: bold; min-height: 16px; margin-top: 6px; }
+
+    #list { display: flex; flex-direction: column; gap: 12px; }
+    .empty { padding: 14px; color: #777; text-align: center; border: 3px dashed #bbb; }
+    .task { border: 3px solid var(--ink); background: #fff; padding: 10px 12px; }
+    .task .head { display: flex; align-items: baseline; gap: 8px; }
+    .task .title { flex: 1; font-weight: bold; word-break: break-word; }
+    .task .dl { font-size: 12px; color: #555; white-space: nowrap; }
+    .task .dl.over { color: #b00020; font-weight: bold; }
+    .x { flex: none; cursor: pointer; border: 2px solid var(--ink); background: #fff;
+         font-weight: bold; line-height: 1; padding: 2px 7px; box-shadow: 2px 2px 0 rgba(0,0,0,.35); }
+    .x:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 rgba(0,0,0,.35); }
+
+    .bar { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+    .bar .track { flex: 1; height: 14px; border: 2px solid var(--ink); background: #fff; }
+    .bar .fill { height: 100%; background: var(--ink); width: 0; }
+    .bar .pct { font-size: 12px; font-weight: bold; white-space: nowrap; }
+
+    .subs { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 2px; }
+    .sub { display: flex; align-items: center; gap: 8px; }
+    .sub input[type=checkbox] { width: 16px; height: 16px; flex: none; }
+    .sub .stitle { flex: 1; word-break: break-word; }
+    .sub.done .stitle { text-decoration: line-through; color: #888; }
+    .addsub { display: flex; gap: 6px; margin-top: 6px; }
+    .addsub input { padding: 5px 8px; border-width: 2px; }
+    .addsub button { padding: 5px 10px; border-width: 2px; box-shadow: 2px 2px 0 rgba(0,0,0,.35); }
+    .two { display: flex; gap: 10px; }
+    .two > div { flex: 1; }
+  </style>
+</head>
+<body>
+  <h1>Checklist</h1>
+  <div id="list"></div>
+
+  <h2>New task</h2>
+  <div class="two">
+    <div>
+      <label for="ttitle">Task</label>
+      <input id="ttitle" maxlength="200" placeholder="e.g. Draft Financial Memo" />
+    </div>
+    <div>
+      <label for="tdeadline">Deadline</label>
+      <input id="tdeadline" type="datetime-local" />
+    </div>
+  </div>
+  <div class="err" id="err"></div>
+  <div class="row">
+    <button id="close">Close</button>
+    <button id="addTask" class="primary">Add task</button>
+  </div>
+
+  <script>
+  // IIFE so `const api` is function-scoped — a top-level `const api` would collide
+  // with the non-configurable global `api` that contextBridge exposes, killing the script.
+  (() => {
+    const el = (id) => document.getElementById(id);
+    const pad = (n) => String(n).padStart(2, '0');
+    const api = window.api;
+
+    function defaultDeadline() {
+      const d = new Date(Date.now() + 24 * 60 * 60000);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    el('tdeadline').value = defaultDeadline();
+    el('ttitle').focus();
+
+    function fmtDeadline(ms) {
+      const d = new Date(ms);
+      return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function taskCard(t) {
+      const total = t.subtasks.length;
+      const done = t.subtasks.filter((s) => s.done).length;
+      const pct = total ? Math.round((done / total) * 100) : 0;
+
+      const card = document.createElement('div');
+      card.className = 'task';
+
+      // header: title · deadline · delete
+      const head = document.createElement('div');
+      head.className = 'head';
+      const title = document.createElement('div');
+      title.className = 'title';
+      title.textContent = t.title;
+      head.appendChild(title);
+      if (t.deadline) {
+        const dl = document.createElement('div');
+        const over = t.deadline < Date.now() && pct < 100;
+        dl.className = 'dl' + (over ? ' over' : '');
+        dl.textContent = (over ? 'overdue ' : '') + fmtDeadline(t.deadline);
+        head.appendChild(dl);
+      }
+      const del = document.createElement('div');
+      del.className = 'x';
+      del.textContent = '×';
+      del.title = 'Delete task';
+      del.addEventListener('click', () => api.removeTask(t.id));
+      head.appendChild(del);
+      card.appendChild(head);
+
+      // progress bar
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      const track = document.createElement('div');
+      track.className = 'track';
+      const fill = document.createElement('div');
+      fill.className = 'fill';
+      fill.style.width = pct + '%';
+      track.appendChild(fill);
+      const pctEl = document.createElement('div');
+      pctEl.className = 'pct';
+      pctEl.textContent = `${done}/${total} · ${pct}%`;
+      bar.appendChild(track);
+      bar.appendChild(pctEl);
+      card.appendChild(bar);
+
+      // subtasks
+      const subs = document.createElement('div');
+      subs.className = 'subs';
+      for (const s of t.subtasks) {
+        const row = document.createElement('div');
+        row.className = 'sub' + (s.done ? ' done' : '');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = s.done;
+        cb.addEventListener('change', () => api.toggleSubtask({ taskId: t.id, subId: s.id }));
+        const stitle = document.createElement('div');
+        stitle.className = 'stitle';
+        stitle.textContent = s.title;
+        const sx = document.createElement('div');
+        sx.className = 'x';
+        sx.textContent = '×';
+        sx.title = 'Delete subtask';
+        sx.addEventListener('click', () => api.removeSubtask({ taskId: t.id, subId: s.id }));
+        row.appendChild(cb);
+        row.appendChild(stitle);
+        row.appendChild(sx);
+        subs.appendChild(row);
+      }
+      card.appendChild(subs);
+
+      // add-subtask inline
+      const addRow = document.createElement('div');
+      addRow.className = 'addsub';
+      const sinput = document.createElement('input');
+      sinput.placeholder = 'Add a subtask…';
+      sinput.maxLength = 200;
+      const sbtn = document.createElement('button');
+      sbtn.textContent = '+';
+      const addSub = () => {
+        const v = sinput.value.trim();
+        if (!v) return;
+        api.addSubtask({ taskId: t.id, title: v });
+        sinput.value = '';
+      };
+      sbtn.addEventListener('click', addSub);
+      sinput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addSub(); });
+      addRow.appendChild(sinput);
+      addRow.appendChild(sbtn);
+      card.appendChild(addRow);
+
+      return card;
+    }
+
+    async function render() {
+      const items = await api.getTasks();
+      const list = el('list');
+      list.innerHTML = '';
+      if (!items.length) {
+        const e = document.createElement('div');
+        e.className = 'empty';
+        e.textContent = 'No tasks yet — add one below.';
+        list.appendChild(e);
+        return;
+      }
+      for (const t of items) list.appendChild(taskCard(t));
+    }
+
+    function addTask() {
+      const title = el('ttitle').value.trim();
+      if (!title) { el('err').textContent = 'Please name the task.'; return; }
+      const dlVal = el('tdeadline').value;
+      const deadline = dlVal ? new Date(dlVal).getTime() : null;
+      api.addTask({ title, deadline });
+      el('ttitle').value = '';
+      el('tdeadline').value = defaultDeadline();
+      el('err').textContent = '';
+      el('ttitle').focus();
+    }
+
+    el('addTask').addEventListener('click', addTask);
+    el('close').addEventListener('click', () => api.close());
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') api.close(); });
+    el('ttitle').addEventListener('keydown', (e) => { if (e.key === 'Enter') addTask(); });
+
+    api.onTasksChanged(render);
+    render();
+  })();
+  </script>
+</body>
+</html>
