@@ -57,7 +57,7 @@ The cat appears near the bottom-right of your screen.
 
 ## Packaging
 
-Portable Windows build: `npm run dist` → `dist/Mira-0.1.0-portable.exe` (run from a path **without** `&` for local builds). `asarUnpack` for the `uiohook-napi` native module is configured, and `npmRebuild: false` (the N-API binary is ABI-stable). The GitHub workflow builds the same portable `.exe` and attaches it to `v*` tag releases.
+Windows release build: `npm run dist` -> `dist/Mira-<version>-win.zip` (run from a path **without** `&` for local builds). `asarUnpack` for the `uiohook-napi` native module is configured, and `npmRebuild: false` (the N-API binary is ABI-stable). The GitHub workflow builds the ZIP and attaches it to `v*` tag releases.
 
 ## Credits
 

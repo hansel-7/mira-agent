@@ -1,6 +1,6 @@
 {
   "name": "pixel-cat",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Mira AI desktop pet with chat, reminders, checklist, and Pomodoro tools",
   "author": "Mira team",
   "license": "MIT",
@@ -41,11 +41,8 @@
     "win": {
       "icon": "build/icon.png",
       "target": [
-        "portable"
+        "zip"
       ]
-    },
-    "portable": {
-      "artifactName": "Mira-${version}-portable.${ext}"
     }
   }
 }

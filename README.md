@@ -61,6 +61,14 @@ npm install --ignore-scripts
 npm start
 ```
 
+## GitHub release
+
+Tagged releases build Windows artifacts in GitHub Actions:
+
+- `Mira-<version>-win.zip` - the full-feature Windows app packaged as a ZIP.
+
+The hackathon build is currently unsigned. On some Windows machines, Defender or SmartScreen may flag a new unsigned Electron build before it has reputation, especially because Mira includes a global keyboard hook for the typing animation. If Defender flags a release, check Windows Security > Virus & threat protection > Protection history for the detection name, then submit the exact release file to [Microsoft Security Intelligence](https://www.microsoft.com/en-us/wdsi/filesubmission) as a software developer and mark it as incorrectly detected. The permanent production fix is to sign releases with an Authenticode code-signing certificate.
+
 ## Configuration
 
 Secrets live in a `.env` at the repo root (never committed — see `.gitignore`):
@@ -75,7 +83,7 @@ On first launch it also creates `%APPDATA%/Mira/config.json`; edit that file to 
 
 ## Status
 
-Built for the VNG GreenNode Claw-a-thon 2026. The agent is deployed and the desktop pet connects to it; packaging is focused on a portable Windows `.exe` release for GitHub, built locally or by the `Build Mira Portable EXE` workflow.
+Built for the VNG GreenNode Claw-a-thon 2026. The agent is deployed and the desktop pet connects to it; packaging is focused on a Windows ZIP release for GitHub, built locally or by the `Build Mira Windows ZIP` workflow.
 
 ## Credits
 
