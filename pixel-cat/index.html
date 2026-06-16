@@ -170,6 +170,35 @@
       bubble.style.bottom = bubbleBottomPx() + 'px';
     });
 
+    // ---------- cat color customization ----------
+    let catColor = { r: 0, g: 0, b: 0, enabled: false };
+    function setCatColor(hex) {
+      const m = /^#([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+      if (!m) return;
+      const n = parseInt(m[1], 16);
+      catColor = {
+        r: (n >> 16) & 255,
+        g: (n >> 8) & 255,
+        b: n & 255,
+        enabled: n !== 0,
+      };
+    }
+    function applyCatColorTint() {
+      if (!catColor.enabled) return;
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] === 0) continue;
+        if (d[i] <= 34 && d[i + 1] <= 34 && d[i + 2] <= 34) {
+          d[i] = catColor.r;
+          d[i + 1] = catColor.g;
+          d[i + 2] = catColor.b;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+    window.catAPI.onCatColor(setCatColor);
+
     // ---------- layer states (populated from rig-meta neutrals once it loads) ----------
     const state = {};
     let blinking = false;
@@ -306,12 +335,14 @@
       if (speaking && yapImg.complete) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(yapImg, pop ? 320 : 0, 0, 320, 320, 0, 0, canvas.width, canvas.height);
+        applyCatColorTint();
         applyHeatTint();
         return;
       }
       if (typingUntil > now && typImg.complete) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(typImg, typFrame * 80, 0, 80, 80, 0, 0, canvas.width, canvas.height);
+        applyCatColorTint();
         applyHeatTint();
         return;
       }
@@ -335,6 +366,7 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(buf, 0, 0, SPRITE, split, leanPx, 0, canvas.width, split * k);
       ctx.drawImage(buf, 0, split, SPRITE, SPRITE - split, 0, split * k, canvas.width, (SPRITE - split) * k);
+      applyCatColorTint();
       applyHeatTint();
     }
     draw();
@@ -432,12 +464,6 @@
       openChat();
       say(prompt);
     });
-    window.catAPI.onWeeklySummary((text) => {
-      chat.placeholder = 'Say something to Mira...';
-      openChat();
-      say(text);
-    });
-
     // ---- parse optional action blocks the agent may append (reminders, tasks) ----
     function createReminderFromChat(j) {
       const task = String(j.task || '').trim().slice(0, 200);
@@ -551,8 +577,9 @@
     // ---------- first-run feature tour (after onboarding) ----------
     const INTRO = [
       "Click me anytime to chat — I'm hooked up to a real AI 🧠",
-      "Right-click me for the menu: reminders, a Pomodoro timer, profile, and clock colour.",
-      "Reminders can be one-off, daily, or weekly — open Reminders… to add or delete them.",
+      "Right-click me for the menu: reminders, checklist, Pomodoro, profile, timer color, and cat color.",
+      "Reminders can be one-off, daily, or weekly — open Reminders… to add or hide them.",
+      "I'll check in on your mood on weekdays and give you a visual recap by Friday.",
       "Start a Pomodoro and a little timer sits beside me, tracking your focus and breaks.",
       "Drag me around, scroll on me to resize, and double-click to quit.",
       "Type fast anywhere and I'll heat up 🔥 — try it sometime!",

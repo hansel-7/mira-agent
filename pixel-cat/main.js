@@ -128,6 +128,7 @@ let moodPath = null;
 let mood = { entries: [], lastWeeklySummaryWeek: null };
 let moodTimers = [];
 let weeklySummaryRunning = false;
+let latestWeeklySummaryPayload = null;
 
 const MOOD_WORDS = {
   positive: [
@@ -317,6 +318,7 @@ function createWindow() {
   win.loadFile('index.html');
   win.webContents.on('did-finish-load', () => {
     sendLayout();
+    sendCatColor();
     startWellbeingTimers();
   });
 
@@ -430,6 +432,8 @@ const DIALOG_SIZE = {
   reminders: { width: 400, height: 580 },
   pomodoro: { width: 380, height: 470 },
   checklist: { width: 460, height: 640 },
+  'cat-color': { width: 400, height: 440 },
+  'weekly-summary': { width: 520, height: 640 },
 };
 const dialogs = {}; // name -> BrowserWindow (one instance per dialog)
 function openDialog(name) {
@@ -456,6 +460,7 @@ ipcMain.on('dialog:close', (e) => {
   const w = BrowserWindow.fromWebContents(e.sender);
   if (w && !w.isDestroyed()) w.close();
 });
+ipcMain.handle('weekly-summary:get', () => currentWeeklyRecapPayload());
 
 // Mira speaks via her bubble (reminders firing, pomodoro phase changes)
 function notify(text) {
@@ -541,6 +546,118 @@ function weeklyActivity(ref = new Date()) {
     reminders: completedReminderEventsForWeek(start, end),
   };
 }
+function moodEmoji(score, hasEntry) {
+  if (!hasEntry) return '\u25FB\uFE0F';
+  if (score >= 0.5) return '\uD83D\uDE04';
+  if (score >= 0.15) return '\uD83D\uDE42';
+  if (score > -0.15) return '\uD83D\uDE10';
+  if (score > -0.5) return '\uD83D\uDE1F';
+  return '\uD83D\uDE23';
+}
+function moodLabel(score, hasEntry) {
+  if (!hasEntry) return 'No check-in';
+  if (score >= 0.34) return 'Bright';
+  if (score <= -0.34) return 'Heavy';
+  return 'Steady';
+}
+function weeklyMoodDays(activity) {
+  const byDate = new Map(activity.moods.map((m) => [m.date, m]));
+  const start = new Date(activity.start);
+  return [0, 1, 2, 3, 4].map((offset) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + offset);
+    const date = localDateKey(d);
+    const entry = byDate.get(date);
+    const hasEntry = !!entry;
+    const score = hasEntry ? Number(entry.score) || 0 : null;
+    return {
+      date,
+      day: SHORT_WEEKDAY[d.getDay()],
+      emoji: moodEmoji(score, hasEntry),
+      mood: moodLabel(score, hasEntry),
+      summary: hasEntry ? (entry.summary || entry.rawText || '') : '',
+      score,
+      hasEntry,
+    };
+  });
+}
+function weeklyMoodTrend(days) {
+  const entries = days.filter((d) => d.hasEntry);
+  if (!entries.length) return 'No mood check-ins landed this week, so Mira is keeping the recap gentle and task-focused.';
+  const avg = entries.reduce((sum, d) => sum + d.score, 0) / entries.length;
+  const first = entries[0].score;
+  const last = entries[entries.length - 1].score;
+  const tone = avg >= 0.34 ? 'mostly bright' : avg <= -0.34 ? 'pretty heavy' : 'mixed but steady';
+  let direction = 'held fairly steady';
+  if (last - first >= 0.34) direction = 'ended lighter than it started';
+  if (last - first <= -0.34) direction = 'asked more from you toward the end';
+  return `${entries.length}/5 check-ins recorded. Your week felt ${tone}, and it ${direction}.`;
+}
+function weeklyWinItems(activity) {
+  const items = [];
+  for (const t of activity.tasks) {
+    items.push({
+      title: clampText(t.title || 'Checklist item', 180),
+      source: t.kind === 'subtask' ? 'Subtask' : 'Task',
+      action: t.action === 'completed' ? 'Completed' : 'Cleared from view',
+      when: formatEventDate(t.completedAt),
+      at: t.completedAt,
+    });
+  }
+  for (const r of activity.reminders) {
+    items.push({
+      title: clampText(r.task || 'Reminder', 180),
+      source: (r.repeat || 'once') === 'once' ? 'Reminder' : 'Recurring reminder',
+      action: r.action === 'completed' ? 'Completed' : 'Cleared from view',
+      when: formatEventDate(r.completedAt),
+      at: r.completedAt,
+    });
+  }
+  items.sort((a, b) => a.at - b.at);
+  return items;
+}
+function weeklyConqueredText(items) {
+  if (!items.length) return 'No completed checklist or reminder items were recorded this week, but the recap still counts the fact that you showed up.';
+  const completed = items.filter((i) => i.action === 'Completed').length;
+  const cleared = items.length - completed;
+  const parts = [];
+  if (completed) parts.push(`${completed} completed`);
+  if (cleared) parts.push(`${cleared} cleared from view`);
+  return `You moved ${items.length} item${items.length === 1 ? '' : 's'} through the week: ${parts.join(', ')}.`;
+}
+function buildWeeklyRecapPayload(activity, encouragementText = '') {
+  const days = weeklyMoodDays(activity);
+  const items = weeklyWinItems(activity);
+  const visibleItems = items.slice(-10);
+  const weekStart = new Date(activity.start);
+  const weekEnd = new Date(activity.start + 4 * DAY_MS);
+  return {
+    weekKey: activity.weekKey,
+    generatedAt: Date.now(),
+    weekLabel: `${SHORT_WEEKDAY[weekStart.getDay()]} ${pad2(weekStart.getMonth() + 1)}/${pad2(weekStart.getDate())} - ${SHORT_WEEKDAY[weekEnd.getDay()]} ${pad2(weekEnd.getMonth() + 1)}/${pad2(weekEnd.getDate())}`,
+    days,
+    moodTrend: weeklyMoodTrend(days),
+    conqueredText: weeklyConqueredText(items),
+    wins: visibleItems,
+    hiddenWinCount: Math.max(0, items.length - visibleItems.length),
+    encouragementText: clampText(encouragementText, 1400) || weeklySummaryFallback(activity),
+  };
+}
+function currentWeeklyRecapPayload() {
+  const week = workweekKey();
+  if (latestWeeklySummaryPayload && latestWeeklySummaryPayload.weekKey === week) return latestWeeklySummaryPayload;
+  if (mood.lastWeeklySummary && mood.lastWeeklySummary.weekKey === week) return mood.lastWeeklySummary;
+  return buildWeeklyRecapPayload(weeklyActivity(new Date()), '');
+}
+function showWeeklySummary(activity, encouragementText) {
+  const payload = buildWeeklyRecapPayload(activity, encouragementText);
+  latestWeeklySummaryPayload = payload;
+  mood.lastWeeklySummaryWeek = activity.weekKey;
+  mood.lastWeeklySummary = payload;
+  saveMood();
+  notify('Your Friday recap is ready.');
+  openDialog('weekly-summary');
+}
 function formatEventDate(ms) {
   const d = new Date(ms);
   return `${SHORT_WEEKDAY[d.getDay()]} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -565,10 +682,11 @@ function weeklySummaryPrompt(activity) {
   const taskLines = activity.tasks.map((t) => `- ${formatEventDate(t.completedAt)}: ${t.title} (${t.action})`);
   const reminderLines = activity.reminders.map((r) => `- ${formatEventDate(r.completedAt)}: ${r.task} (${r.action})`);
   return [
-    'Write a warm Friday weekly wrap-up for the user as Mira.',
-    'Tone: encouraging, specific, proud, and not clinical. Do not guilt them.',
-    'Mention emotional trend, completed/hidden checklist and reminder activity, and one gentle suggestion for next week.',
-    'Keep it under 180 words.',
+    'Write the encouragement section for a visual Friday weekly recap from Mira.',
+    'Tone: warm, specific, proud, and not clinical. Do not guilt the user.',
+    'The visual already lists mood emoji and completed/cleared work, so do not repeat every item.',
+    'Base the encouragement on the emotional trend and the checklist/reminder activity.',
+    'Keep it to one short paragraph under 110 words.',
     '',
     'Mood check-ins:',
     moodLines.length ? moodLines.join('\n') : '- none recorded',
@@ -625,14 +743,10 @@ async function runWeeklySummaryIfDue(now = new Date()) {
       { role: 'user', content: weeklySummaryPrompt(activity) },
     ]);
     const summary = clampText(text, 1400) || weeklySummaryFallback(activity);
-    mood.lastWeeklySummaryWeek = week;
-    saveMood();
-    if (win && !win.isDestroyed()) win.webContents.send('weekly-summary', summary);
+    showWeeklySummary(activity, summary);
   } catch (err) {
     console.error('weekly summary failed:', err.message);
-    mood.lastWeeklySummaryWeek = week;
-    saveMood();
-    if (win && !win.isDestroyed()) win.webContents.send('weekly-summary', weeklySummaryFallback(activity));
+    showWeeklySummary(activity, weeklySummaryFallback(activity));
   } finally {
     weeklySummaryRunning = false;
   }
@@ -650,12 +764,18 @@ function startWellbeingTimers() {
 
 // ---------- settings (userData/settings.json) ----------
 let settingsPath = null;
-let settings = { clockColor: 'auto' };
+let settings = { clockColor: 'auto', catColor: '#000000' };
+function normalizeHexColor(value, fallback = '#000000') {
+  const raw = String(value || '').trim();
+  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw.toLowerCase();
+  return fallback;
+}
 function loadSettings() {
   settingsPath = path.join(app.getPath('userData'), 'settings.json');
   try {
     settings = { ...settings, ...JSON.parse(fs.readFileSync(settingsPath, 'utf8')) };
   } catch (e) { /* defaults */ }
+  settings.catColor = normalizeHexColor(settings.catColor);
 }
 function saveSettings() {
   try {
@@ -668,11 +788,21 @@ function saveSettings() {
 function sendClockColor() {
   if (clockWin && !clockWin.isDestroyed()) clockWin.webContents.send('color', settings.clockColor);
 }
+function sendCatColor() {
+  if (win && !win.isDestroyed()) win.webContents.send('cat-color', settings.catColor);
+}
 function setClockColor(c) {
   settings.clockColor = c;
   saveSettings();
   sendClockColor();
 }
+function setCatColor(c) {
+  settings.catColor = normalizeHexColor(c);
+  saveSettings();
+  sendCatColor();
+}
+ipcMain.handle('cat-color:get', () => settings.catColor);
+ipcMain.on('cat-color:set', (_e, c) => setCatColor(c));
 
 // ---------- reminders (userData/reminders.json) ----------
 let remindersPath = null;
@@ -1061,6 +1191,7 @@ function buildMenu() {
       click: () => setClockColor(c.value),
     })),
   });
+  items.push({ label: 'Cat color…', click: () => openDialog('cat-color') });
   items.push({ label: 'Edit profile…', click: () => openDialog('profile') });
   items.push({ type: 'separator' });
   items.push({ label: 'Quit Mira', click: () => app.quit() });

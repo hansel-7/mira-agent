@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root {
+      --ink: #0a0a0a;
+      --paper: #ffffff;
+      --mist: #f4f4f4;
+      --rose: #ffd7e8;
+      --mint: #c7f2df;
+      --sky: #cfe9ff;
+      --gold: #ffe58a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 18px; background: var(--mist); color: var(--ink);
+      font-family: 'Courier New', monospace; font-size: 14px;
+    }
+    h1 { font-size: 20px; margin: 0; }
+    h2 {
+      font-size: 13px; margin: 16px 0 8px;
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+    .top {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px; margin-bottom: 12px;
+    }
+    .week {
+      font-size: 12px; font-weight: bold; background: var(--gold);
+      border: 3px solid var(--ink); padding: 5px 8px; white-space: nowrap;
+      box-shadow: 3px 3px 0 rgba(0,0,0,.35);
+    }
+    .moodGrid {
+      display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .day {
+      min-height: 92px; border: 3px solid var(--ink); background: var(--paper);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 5px; padding: 8px 4px; text-align: center;
+      box-shadow: 3px 3px 0 rgba(0,0,0,.25);
+    }
+    .day:nth-child(1) { background: var(--rose); }
+    .day:nth-child(2) { background: var(--mint); }
+    .day:nth-child(3) { background: var(--sky); }
+    .day:nth-child(4) { background: var(--gold); }
+    .day:nth-child(5) { background: var(--paper); }
+    .day.missing { color: #777; background: #fff; border-style: dashed; }
+    .emoji { font-size: 30px; line-height: 1; }
+    .dow { font-size: 12px; font-weight: bold; }
+    .mood { font-size: 11px; line-height: 1.2; }
+    .panel {
+      border: 3px solid var(--ink); background: var(--paper); padding: 12px;
+      box-shadow: 3px 3px 0 rgba(0,0,0,.25);
+    }
+    .trend, .copy { line-height: 1.45; }
+    .wins { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+    .win {
+      border: 2px solid var(--ink); padding: 8px; background: #fbfbfb;
+      display: grid; grid-template-columns: 1fr auto; gap: 6px 10px;
+    }
+    .winTitle { font-weight: bold; word-break: break-word; }
+    .winMeta {
+      grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px;
+      color: #555; font-size: 12px;
+    }
+    .tag {
+      border: 2px solid var(--ink); padding: 1px 5px; background: #fff;
+      color: var(--ink); font-weight: bold;
+    }
+    .empty {
+      border: 3px dashed #aaa; color: #666; padding: 12px; text-align: center;
+      background: #fff;
+    }
+    .more { color: #555; font-size: 12px; margin-top: 8px; }
+    .actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+    button {
+      font-family: inherit; font-size: 14px; font-weight: bold; padding: 8px 16px;
+      border: 3px solid var(--ink); background: var(--ink); color: #fff;
+      cursor: pointer; box-shadow: 3px 3px 0 rgba(0,0,0,.4);
+    }
+    button:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 rgba(0,0,0,.4); }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <h1>Friday recap</h1>
+      <div class="copy">Mira saved the workweek record locally.</div>
+    </div>
+    <div id="week" class="week">This week</div>
+  </div>
+
+  <h2>Mood trail</h2>
+  <div id="moodGrid" class="moodGrid"></div>
+  <div id="trend" class="panel trend" style="margin-top: 12px;"></div>
+
+  <h2>Conquered this week</h2>
+  <div class="panel">
+    <div id="conquered" class="copy"></div>
+    <div id="wins" class="wins"></div>
+    <div id="more" class="more"></div>
+  </div>
+
+  <h2>Encouragement</h2>
+  <div id="encouragement" class="panel copy"></div>
+
+  <div class="actions">
+    <button id="close">Close</button>
+  </div>
+
+  <script>
+  (() => {
+    const api = window.api;
+    const el = (id) => document.getElementById(id);
+
+    function dayCard(day) {
+      const card = document.createElement('div');
+      card.className = 'day' + (day.hasEntry ? '' : ' missing');
+      if (day.summary) card.title = day.summary;
+
+      const dow = document.createElement('div');
+      dow.className = 'dow';
+      dow.textContent = day.day || '';
+
+      const emoji = document.createElement('div');
+      emoji.className = 'emoji';
+      emoji.textContent = day.emoji || '';
+
+      const mood = document.createElement('div');
+      mood.className = 'mood';
+      mood.textContent = day.mood || 'No check-in';
+
+      card.appendChild(dow);
+      card.appendChild(emoji);
+      card.appendChild(mood);
+      return card;
+    }
+
+    function winCard(win) {
+      const card = document.createElement('div');
+      card.className = 'win';
+
+      const title = document.createElement('div');
+      title.className = 'winTitle';
+      title.textContent = win.title || 'Untitled';
+      card.appendChild(title);
+
+      const when = document.createElement('div');
+      when.textContent = win.when || '';
+      card.appendChild(when);
+
+      const meta = document.createElement('div');
+      meta.className = 'winMeta';
+      for (const value of [win.source, win.action]) {
+        if (!value) continue;
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = value;
+        meta.appendChild(tag);
+      }
+      card.appendChild(meta);
+      return card;
+    }
+
+    async function render() {
+      const data = await api.getWeeklySummary();
+      el('week').textContent = data.weekLabel || 'This week';
+      el('trend').textContent = data.moodTrend || '';
+      el('conquered').textContent = data.conqueredText || '';
+      el('encouragement').textContent = data.encouragementText || '';
+
+      const moodGrid = el('moodGrid');
+      moodGrid.innerHTML = '';
+      for (const day of data.days || []) moodGrid.appendChild(dayCard(day));
+
+      const wins = el('wins');
+      wins.innerHTML = '';
+      if (!data.wins || !data.wins.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'No checklist or reminder wins recorded yet.';
+        wins.appendChild(empty);
+      } else {
+        for (const win of data.wins) wins.appendChild(winCard(win));
+      }
+      el('more').textContent = data.hiddenWinCount
+        ? `Plus ${data.hiddenWinCount} earlier item${data.hiddenWinCount === 1 ? '' : 's'} in the local record.`
+        : '';
+    }
+
+    el('close').addEventListener('click', () => api.close());
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') api.close(); });
+    render().catch((err) => {
+      el('trend').textContent = 'Could not load the weekly recap.';
+      el('encouragement').textContent = err && err.message ? err.message : '';
+    });
+  })();
+  </script>
+</body>
+</html>

@@ -37,7 +37,16 @@ Per-user state lives in `%APPDATA%/Mira/` (`profile.json`, `mood.json`,
 - [ ] Casual/slow typing does **not** redden her much
 - [ ] If a reply is streaming, **yapping takes priority** over the typing animation
 
-## 4. Chat
+## 4. Cat color customization
+
+- [ ] Right-click Mira -> **Cat color...** opens an RGB customization window
+- [ ] R/G/B sliders accept the full **0-255** range and stay synced with the number inputs
+- [ ] Changing RGB values updates the preview swatch and Mira's body color live
+- [ ] The color applies in idle, yapping, and typing animations
+- [ ] **Classic black** restores the original black cat
+- [ ] Close and relaunch -> selected cat color persists via `%APPDATA%/Mira/settings.json`
+
+## 5. Chat
 
 - [ ] **Click** the cat opens the input box (placeholder "Say something to Mira…")
 - [ ] Typing + **Enter** sends; an empty input does nothing
@@ -51,7 +60,7 @@ Per-user state lives in `%APPDATA%/Mira/` (`profile.json`, `mood.json`,
 - [ ] Replies reflect the **profile** (uses your name / matches the tone you set)
 - [ ] Agent unreachable → she says "Mrrp?! (can't reach my brain: …)" instead of hanging
 
-## 5. First-run onboarding + feature tour
+## 6. First-run onboarding + feature tour
 
 Delete `%APPDATA%/Mira/profile.json` to re-trigger.
 
@@ -59,17 +68,19 @@ Delete `%APPDATA%/Mira/profile.json` to re-trigger.
 - [ ] Question 2 greets you by the name you gave
 - [ ] The flow **can't be dismissed** mid-way (Esc/click/blur don't close it)
 - [ ] After the last answer she runs the **feature tour** (several blurbs)
+- [ ] Feature tour mentions mood tracking and the Friday summary
+- [ ] Feature tour mentions Cat color customization in the right-click menu
 - [ ] **Enter or click** advances the tour; **Esc** skips it; input is read-only during it
 - [ ] After the tour she drops into normal chat; `profile.json` is written
 - [ ] On the **next** launch onboarding/tour do **not** run (returning user)
 
-## 6. Right-click menu
+## 7. Right-click menu
 
-- [ ] Right-clicking the cat opens a native menu: Checklist…, Reminders…, Start Pomodoro…, Timer color ▸, Edit profile…, Quit
+- [ ] Right-clicking the cat opens a native menu: Checklist…, Reminders…, Start Pomodoro…, Timer color ▸, Cat color…, Edit profile…, Quit
 - [ ] When Pomodoro is running the item reads **Stop Pomodoro**
 - [ ] Each item opens its window / performs its action
 
-## 7. Reminders (`Reminders…`)
+## 8. Reminders (`Reminders…`)
 
 - [ ] The window lists existing reminders (sorted by next time) and has an add form
 - [ ] Add a **one-off** ~1 min out -> at the time, Mira pops `⏰ "..." is due now!` and it stays visible as completed for the current workweek
@@ -79,7 +90,7 @@ Delete `%APPDATA%/Mira/profile.json` to re-trigger.
 - [ ] Completed one-off reminders survive an app restart during the same workweek
 - [ ] Recurring reminders survive an app restart (missed ones roll forward, no backlog spam)
 
-## 8. Checklist (`Checklist…`)
+## 9. Checklist (`Checklist…`)
 
 - [ ] **Add task** with a title + deadline and no subtasks -> appears with a top-level **Done** button and a 0/1 progress bar
 - [ ] Click top-level **Done** -> task marks complete, progress becomes 1/1, and **Undo** returns it to active
@@ -90,7 +101,7 @@ Delete `%APPDATA%/Mira/profile.json` to re-trigger.
 - [ ] Completed tasks/subtasks remain visible during the current workweek unless hidden
 - [ ] Tasks persist across an app restart
 
-## 9. Mood check-ins + Friday recap
+## 10. Mood check-ins + Friday recap
 
 Delete `%APPDATA%/Mira/mood.json` to reset mood data. To test schedules without waiting, set the Windows clock to the target weekday/time and launch Mira.
 
@@ -99,12 +110,14 @@ Delete `%APPDATA%/Mira/mood.json` to reset mood data. To test schedules without 
 - [ ] Relaunch later the same day -> the 09:30 prompt does **not** repeat after today's mood response is recorded
 - [ ] Set previous workday, answer with a low mood (e.g. "bad/stressed"), then set the clock to the next workday after 09:30 and relaunch -> Mira's prompt references yesterday's mood
 - [ ] Complete or hide at least one checklist item and let at least one reminder complete during the same workweek
-- [ ] Set clock to **Friday 16:59**, launch Mira, wait until **17:00** -> Mira shows an encouraging weekly summary
-- [ ] Friday summary mentions mood trend plus completed or hidden checklist/reminder activity where available
+- [ ] Set clock to **Friday 16:59**, launch Mira, wait until **17:00** -> Mira opens the **Friday recap** window
+- [ ] Mood trail shows five weekday emoji cells (Mon-Fri), with missing days shown as no-check-in cells
+- [ ] Conquered section lists completed or hidden checklist/reminder activity where available
+- [ ] Encouragement section reflects the mood trend and completed/cleared activity without sounding clinical
 - [ ] Relaunch after Friday 17:00 in the same workweek -> weekly summary does **not** repeat
-- [ ] If the agent endpoint is unreachable at Friday 17:00, Mira still shows a local fallback summary instead of hanging
+- [ ] If the agent endpoint is unreachable at Friday 17:00, Mira still opens the recap with a local fallback encouragement instead of hanging
 
-## 10. Pomodoro (`Start Pomodoro…`)
+## 11. Pomodoro (`Start Pomodoro…`)
 
 - [ ] Config dialog takes focus / short break / long break / intervals
 - [ ] A small transparent **timer HUD** appears **above Mira's head** and counts down
@@ -115,7 +128,7 @@ Delete `%APPDATA%/Mira/mood.json` to reset mood data. To test schedules without 
 - [ ] **Timer color ▸** changes the clock colour live; "Auto" tints by phase (focus red / break green); choice persists
 - [ ] **Stop Pomodoro** closes the HUD and the menu item flips back
 
-## 11. Natural-language create (via chat)
+## 12. Natural-language create (via chat)
 
 - [ ] "remind me to … at 5pm tomorrow" creates a **reminder** (check Reminders…); no raw `[[…]]` text flashes in the bubble
 - [ ] "create a Financial Model task with subtasks revenue, costs, valuation due Friday" creates a **task with those subtasks**
@@ -125,7 +138,7 @@ Delete `%APPDATA%/Mira/mood.json` to reset mood data. To test schedules without 
 - [ ] "what's on my task list?" / "how's the … task going?" → answered from the actual checklist
 - [ ] A normal chat message creates nothing (no phantom reminder/task)
 
-## 12. Image input (attach)
+## 13. Image input (attach)
 
 - [ ] With the chat open, the **📎 button** opens a file picker; choosing an image shows an "Image attached" thumbnail chip above the input
 - [ ] **Paste** (Ctrl+V) a copied image / screenshot → same chip appears
@@ -135,17 +148,17 @@ Delete `%APPDATA%/Mira/mood.json` to reset mood data. To test schedules without 
 - [ ] A **follow-up** question about the same image still works (image kept in session history)
 - [ ] Large images don't error or stall (downscaled to ~1024px JPEG before sending)
 
-## 13. Edit profile (`Edit profile…`)
+## 14. Edit profile (`Edit profile…`)
 
 - [ ] Opens prefilled with current values; Save updates them (Ctrl+Enter saves, Esc cancels)
 - [ ] After editing, a new chat reply reflects the change (e.g. new tone/name)
 
-## 14. Persistence & multi-window
+## 15. Persistence & multi-window
 
-- [ ] Quit and relaunch -> profile, mood data, reminders, tasks, and timer-colour are all retained
+- [ ] Quit and relaunch -> profile, mood data, reminders, tasks, timer-colour, and cat colour are all retained
 - [ ] Opening multiple dialogs and the menu doesn't freeze the cat animation or the timer
 
-## 15. Packaging (optional — only if testing the ZIP release)
+## 16. Packaging (optional — only if testing the ZIP release)
 
 - [ ] `npm run dist` produces `dist/Mira-<version>-win.zip` (from a path **without** `&` for local builds)
 - [ ] Extract the ZIP and run `Mira.exe`

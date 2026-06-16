@@ -77,22 +77,23 @@ npm start
 - **Chat** - click Mira to chat with the deployed agent; replies stream into a speech bubble while she yaps.
 - **Image input** - attach or paste an image; the renderer downsizes it before sending it to the agent.
 - **Typing reaction** - global keystrokes drive the keyboard/paw animation; sustained fast typing adds an overheat tint.
+- **Cat color customization** - right-click `Cat color...` to tune Mira with RGB sliders from 0-255; the color persists in local settings.
 - **Reminders** - one-off, daily, or weekly reminders can be managed in the Reminders window or created through chat. Completed one-offs are retained for the workweek; recurring reminders roll forward across restarts.
 - **Checklist** - tasks with subtasks, progress bars, deadlines, top-level done/undo for tasks without subtasks, and hide-from-view behavior that still preserves the weekly record.
-- **Mood check-ins** - weekdays at 09:30, Mira asks how the user is feeling and adapts the next prompt to the previous workday. Fridays at 17:00, she gives an encouraging weekly recap using mood entries plus checklist/reminder activity from the workweek.
+- **Mood check-ins** - weekdays at 09:30, Mira asks how the user is feeling and adapts the next prompt to the previous workday. Fridays at 17:00, she opens a visual recap with emoji mood trail, conquered checklist/reminder activity, and encouragement based on the week.
 - **Pomodoro** - configurable focus/break/long-break timer with a transparent HUD anchored above Mira.
 - **Natural-language create** - chat requests like "remind me..." or "create a task..." can create local reminders/tasks through hidden action blocks parsed by the renderer.
 - **Personalized onboarding** - first launch collects name, department, hobbies, and preferred tone; returning users skip it.
 
 ### Desktop architecture
 
-- `pixel-cat/main.js` owns the Electron windows, global cursor/key hooks, local schedules, user state, right-click menu, dialog windows, Pomodoro timer, reminder engine, checklist engine, mood check-ins, and the Friday recap.
+- `pixel-cat/main.js` owns the Electron windows, global cursor/key hooks, local schedules, user state, right-click menu, dialog windows, Pomodoro timer, cat color settings, reminder engine, checklist engine, mood check-ins, and the Friday recap.
 - `pixel-cat/preload.js` exposes the safe `catAPI` bridge used by the transparent renderer.
-- `pixel-cat/dialog-preload.js` exposes the shared `api` bridge used by profile/reminders/Pomodoro/checklist dialogs.
-- `pixel-cat/index.html` renders the cat, bubble, input, onboarding/tour, image attach flow, chat streaming, hidden action-block parsing, mood prompt capture, and weekly summary display.
-- `pixel-cat/dialogs/*.html` are small focused UI windows for profile, reminders, Pomodoro, and checklist.
+- `pixel-cat/dialog-preload.js` exposes the shared `api` bridge used by profile/reminders/Pomodoro/checklist/cat color/weekly recap dialogs.
+- `pixel-cat/index.html` renders the cat, bubble, input, onboarding/tour, image attach flow, chat streaming, hidden action-block parsing, and mood prompt capture.
+- `pixel-cat/dialogs/*.html` are small focused UI windows for profile, reminders, Pomodoro, checklist, cat color, and the Friday weekly recap.
 - `pixel-cat/clock.html` plus `clock-preload.js` are the Pomodoro HUD.
-- State lives in `%APPDATA%/Mira/`: `config.json` (agent endpoint override), `profile.json`, `mood.json`, `reminders.json`, `tasks.json`, and `settings.json`.
+- State lives in `%APPDATA%/Mira/`: `config.json` (agent endpoint override), `profile.json`, `mood.json` (check-ins + latest weekly recap), `reminders.json`, `tasks.json`, and `settings.json` (timer color + cat color).
 - The file renderer cannot call the deployed agent directly because of CORS, so `main.js` relays `POST /chat` and streams SSE chunks back over IPC.
 
 ### Desktop assets and tuning

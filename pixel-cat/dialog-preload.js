@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Bridge for the small form windows (profile / reminders / pomodoro).
+// Bridge for the small form windows (profile / reminders / pomodoro / recap).
 contextBridge.exposeInMainWorld('api', {
   getProfile: () => ipcRenderer.invoke('profile:get'),
   saveProfile: (p) => ipcRenderer.send('profile:save', p),
@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld('api', {
   removeReminder: (id) => ipcRenderer.send('reminder:remove', id),
   onRemindersChanged: (cb) => ipcRenderer.on('reminders:changed', () => cb()),
   startPomodoro: (cfg) => ipcRenderer.send('pomodoro:start', cfg),
+  getCatColor: () => ipcRenderer.invoke('cat-color:get'),
+  setCatColor: (color) => ipcRenderer.send('cat-color:set', color),
+  getWeeklySummary: () => ipcRenderer.invoke('weekly-summary:get'),
   getTasks: () => ipcRenderer.invoke('tasks:get'),
   addTask: (t) => ipcRenderer.send('task:add', t),
   removeTask: (id) => ipcRenderer.send('task:remove', id),
