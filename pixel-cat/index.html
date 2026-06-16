@@ -420,10 +420,22 @@
 
     // reminders firing / pomodoro phase changes: Mira pops a bubble, auto-hides if idle
     let notifyHideTimer = null;
+    let pendingMoodCheck = null;
     window.catAPI.onNotify((text) => {
       say(text);
       clearTimeout(notifyHideTimer);
       notifyHideTimer = setTimeout(() => { if (!chatOpen) bubble.style.display = 'none'; }, 12000);
+    });
+    window.catAPI.onMoodPrompt(({ dateKey, prompt }) => {
+      pendingMoodCheck = { dateKey, prompt };
+      chat.placeholder = 'Tell Mira how you feel...';
+      openChat();
+      say(prompt);
+    });
+    window.catAPI.onWeeklySummary((text) => {
+      chat.placeholder = 'Say something to Mira...';
+      openChat();
+      say(text);
     });
 
     // ---- parse optional action blocks the agent may append (reminders, tasks) ----
@@ -643,6 +655,13 @@
         }
         if (!text && !pendingImage) return; // allow image-only messages
         chat.value = '';
+        const moodCheck = pendingMoodCheck && !pendingImage ? pendingMoodCheck : null;
+        if (moodCheck) {
+          window.catAPI.recordMood({ dateKey: moodCheck.dateKey, text });
+          history.push({ role: 'assistant', content: moodCheck.prompt });
+          pendingMoodCheck = null;
+          chat.placeholder = 'Say something to Mira...';
+        }
         const content = pendingImage
           ? [{ type: 'image_url', image_url: { url: pendingImage } }, { type: 'text', text }]
           : text;

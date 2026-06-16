@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   getTasks: () => ipcRenderer.invoke('tasks:get'),
   addTask: (t) => ipcRenderer.send('task:add', t),
   removeTask: (id) => ipcRenderer.send('task:remove', id),
+  toggleTaskDone: (id) => ipcRenderer.send('task:toggle-done', id),
   addSubtask: (s) => ipcRenderer.send('subtask:add', s),
   removeSubtask: (s) => ipcRenderer.send('subtask:remove', s),
   toggleSubtask: (s) => ipcRenderer.send('subtask:toggle', s),

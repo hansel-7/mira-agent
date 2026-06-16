@@ -2,6 +2,14 @@
 
 Mira — an AI desktop pet: black pixel cat with an idle rig (blink, ear flicks, tail sway, eye-follow), a popcat yapping animation while she "speaks", and a typing reaction driven by global keystrokes.
 
+<p align="center">
+  <img src="../docs/media/mira-idle.gif" alt="Mira idle animation" width="150" />
+  <img src="../docs/media/mira-yapping.gif" alt="Mira yapping animation" width="150" />
+  <img src="../docs/media/mira-typing.gif" alt="Mira typing animation" width="150" />
+</p>
+
+<p align="center"><strong>Idle</strong> · <strong>Yapping</strong> · <strong>Typing</strong></p>
+
 ## Run
 
 ```
@@ -21,8 +29,10 @@ The cat appears near the bottom-right of your screen.
 - **Image input** — attach an image with the 📎 button or by pasting (Ctrl+V); it's downscaled and sent so Mira can describe / answer questions about it.
 - **Typing reaction** — type in any app and the cat hammers a keyboard; yapping takes priority while she's replying.
 - **Overheat** — sustained fast typing gradually reddens the cat on a gradient; it cools back down when you stop.
-- **Reminders** — one-off, daily, or weekly. The Reminders… window lists/adds/deletes them; Mira pops a bubble at the remind-before time and at the deadline (one-offs auto-remove, recurring roll forward across restarts).
-- **Checklist** — tasks with subtasks, a per-task progress bar, and deadlines (overdue styling). The Checklist… window adds/checks/deletes; Mira can read the list back in chat.
+- **Reminders** — one-off, daily, or weekly. The Reminders… window lists/adds/hides them; Mira pops a bubble at the remind-before time and at the deadline (completed one-offs are retained for the workweek, recurring reminders roll forward across restarts).
+- **Checklist** — tasks with subtasks, simple done/undo for tasks without subtasks, a per-task progress bar, and deadlines (overdue styling). The Checklist… window adds/checks/hides items; Mira can read the active list back in chat.
+- **Mood check-ins** — on weekdays at 09:30, Mira asks how you're feeling and adapts the next morning's prompt to the previous workday. At 17:00 on Friday, she gives an encouraging weekly recap using mood entries plus checklist/reminder activity from the workweek.
+- **Weekly retention** — completed reminders and checklist items stay visible through the current workweek. Hiding an item removes it from the dialog view but keeps the weekly record for Friday's recap.
 - **Pomodoro** — set focus/break/long-break/intervals; a small timer HUD sits above Mira's head (follows her, bubble lifts to clear it) and she announces each phase. Timer colour is configurable.
 - **Talk to create** — "remind me to submit the report at 5pm tomorrow" or "create a Financial Model task with subtasks revenue, costs, valuation due Friday" creates the reminder/task straight from chat; Mira can also generate the subtasks for you.
 - **Right-click menu** — Checklist…, Reminders…, Start/Stop Pomodoro…, Timer color ▸, Edit profile…, Quit.
@@ -33,7 +43,7 @@ The cat appears near the bottom-right of your screen.
 - `main.js` — transparent always-on-top frameless window; polls global cursor every 50ms; global key hook via `uiohook-napi` (fails soft if unavailable); manual window dragging, resize, and click-through over IPC; relays chat to the agent (`POST /chat`, SSE) and streams chunks to the renderer — the `file://` renderer can't call the endpoint itself (no CORS on the backend)
 - `preload.js` — exposes `catAPI` (cursor/key/layout events, drag, resize, quit, menu, profile, notify)
 - Right-click menu is built in `main.js` and popped natively; menu items that need input open small framed form windows in `dialogs/` (`profile.html`, `reminders.html`, `pomodoro.html`, `checklist.html`) via the shared `dialog-preload.js`. The Pomodoro timer HUD is a separate transparent click-through window (`clock.html` + `clock-preload.js`) positioned above Mira. (Dialog scripts that alias `window.api` must run in an IIFE — a top-level `const api` collides with the non-configurable global the bridge exposes.)
-- State in `userData` (`%APPDATA%/Mira/`): `config.json` (agent endpoint override), `profile.json` (onboarding), `reminders.json` (reminder engine — two `setTimeout`s each, recurring rolls forward), `tasks.json` (checklist), `settings.json` (clock colour). `backgroundThrottling: false` on the pet + clock windows so neither freezes when a dialog/menu is focused
+- State in `userData` (`%APPDATA%/Mira/`): `config.json` (agent endpoint override), `profile.json` (onboarding), `mood.json` (weekday check-ins + weekly recap marker), `reminders.json` (reminder engine — two `setTimeout`s each, recurring rolls forward, completed/hidden metadata retained for the workweek), `tasks.json` (checklist with completion/hidden metadata), `settings.json` (clock colour). `backgroundThrottling: false` on the pet + clock windows so neither freezes when a dialog/menu is focused
 - **Natural-language create** — `main.js` injects one client-side system message into every `/chat` request (profile + current local time + reminder/task protocols + a read-only checklist summary), so Mira can create reminders/tasks and answer questions about them with no backend change. When asked, the agent appends a hidden `[[REMINDER]]{…}` or `[[TASK]]{…}` block; the renderer strips it from the bubble mid-stream and dispatches to the local engines. Bad/past/malformed data is dropped client-side
 - `index.html` — all rendering and behavior. Draw priority: speaking (yap frames) > typing (keyboard frames) > idle rig
   - Idle: composites `assets/mira_base.png` + patch regions from `assets/mira_rig.png` (ears/tail/whiskers/mouth/blink, per `assets/rig-meta.json`) on an 80×80 buffer; pupils drawn dynamically to track the cursor; upscales nearest-neighbor with a slight body lean
@@ -45,6 +55,7 @@ The cat appears near the bottom-right of your screen.
 - `assets/mira_still.png` — source sheet for the rig; frame 5 (open eyes) is the base
 - `tools/generate_rig.py` — rebuilds `mira_base.png`, `mira_rig.png`, `rig-meta.json` from `mira_still.png` (run from this folder; requires Pillow)
 - `assets/mira_yapping.png`, `assets/mira_typing_80x80.png` — hand-made sheets, no generator
+- `../docs/media/mira-*.gif` — README animations generated from the same app sprites
 
 ## Tweaks
 

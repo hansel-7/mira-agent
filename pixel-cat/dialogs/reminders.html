@@ -29,6 +29,7 @@
     /* list */
     #list { border: 3px solid var(--ink); background: #fff; max-height: 170px; overflow-y: auto; }
     .item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 2px solid #ddd; }
+    .item.done .task { text-decoration: line-through; color: #666; }
     .item:last-child { border-bottom: none; }
     .item .info { flex: 1; min-width: 0; }
     .item .task { font-weight: bold; word-break: break-word; }
@@ -92,6 +93,10 @@
 
     const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     function fmtWhen(r) {
+      if (r.completedAt && r.repeat === 'once') {
+        const c = new Date(r.completedAt);
+        return `Completed ${WEEKDAY[c.getDay()]} ${pad(c.getDate())}/${pad(c.getMonth() + 1)} ${pad(c.getHours())}:${pad(c.getMinutes())}`;
+      }
       const d = new Date(r.deadline);
       const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
       if (r.repeat === 'daily') return `Daily at ${time}`;
@@ -107,10 +112,10 @@
         list.innerHTML = '<div class="empty">No reminders yet.</div>';
         return;
       }
-      items.sort((a, b) => a.deadline - b.deadline);
+      items.sort((a, b) => (a.completedAt || a.deadline) - (b.completedAt || b.deadline));
       for (const r of items) {
         const row = document.createElement('div');
-        row.className = 'item';
+        row.className = 'item' + (r.completedAt && r.repeat === 'once' ? ' done' : '');
         const info = document.createElement('div');
         info.className = 'info';
         const task = document.createElement('div');
@@ -118,12 +123,14 @@
         task.textContent = r.task;
         const when = document.createElement('div');
         when.className = 'when';
-        when.textContent = fmtWhen(r) + ` · ${r.remindBefore}m before`;
+        when.textContent = r.completedAt && r.repeat === 'once'
+          ? fmtWhen(r)
+          : fmtWhen(r) + ` · ${r.remindBefore}m before`;
         info.appendChild(task);
         info.appendChild(when);
         const del = document.createElement('button');
         del.className = 'del';
-        del.textContent = 'Delete';
+        del.textContent = 'Hide';
         del.addEventListener('click', () => window.api.removeReminder(r.id));
         row.appendChild(info);
         row.appendChild(del);

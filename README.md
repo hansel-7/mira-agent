@@ -7,6 +7,14 @@ Mira is a personal AI assistant with two halves:
 
 The two communicate only over HTTP (`POST /chat`, server-sent events), so they deploy and version independently: the agent ships as a Docker image, the desktop pet ships as a downloadable app.
 
+<p align="center">
+  <img src="docs/media/mira-idle.gif" alt="Mira idle animation" width="150" />
+  <img src="docs/media/mira-yapping.gif" alt="Mira yapping animation" width="150" />
+  <img src="docs/media/mira-typing.gif" alt="Mira typing animation" width="150" />
+</p>
+
+<p align="center"><strong>Idle companion</strong> · <strong>Yapping replies</strong> · <strong>Keyboard chaos</strong></p>
+
 ```
 ┌──────────────────────┐         POST /chat (SSE)        ┌──────────────────────┐
 │  pixel-cat (Electron)│  ───────────────────────────▶   │  Flask agent (app.py)│
@@ -61,6 +69,39 @@ npm install --ignore-scripts
 npm start
 ```
 
+`--ignore-scripts` matters for local development from this repo path: the folder lives under a path containing `&`, which breaks npm lifecycle scripts on Windows. The native dependency (`uiohook-napi`) ships prebuilt binaries, and the `start` script invokes Electron through Node for the same reason.
+
+### Desktop features
+
+- **Idle presence** - eyes/head follow the cursor, with blink, ear flick, tail sway, whisker twitch, drag-to-move, scroll-to-resize, double-click-to-quit, and click-through outside the cat/chat UI.
+- **Chat** - click Mira to chat with the deployed agent; replies stream into a speech bubble while she yaps.
+- **Image input** - attach or paste an image; the renderer downsizes it before sending it to the agent.
+- **Typing reaction** - global keystrokes drive the keyboard/paw animation; sustained fast typing adds an overheat tint.
+- **Reminders** - one-off, daily, or weekly reminders can be managed in the Reminders window or created through chat. Completed one-offs are retained for the workweek; recurring reminders roll forward across restarts.
+- **Checklist** - tasks with subtasks, progress bars, deadlines, top-level done/undo for tasks without subtasks, and hide-from-view behavior that still preserves the weekly record.
+- **Mood check-ins** - weekdays at 09:30, Mira asks how the user is feeling and adapts the next prompt to the previous workday. Fridays at 17:00, she gives an encouraging weekly recap using mood entries plus checklist/reminder activity from the workweek.
+- **Pomodoro** - configurable focus/break/long-break timer with a transparent HUD anchored above Mira.
+- **Natural-language create** - chat requests like "remind me..." or "create a task..." can create local reminders/tasks through hidden action blocks parsed by the renderer.
+- **Personalized onboarding** - first launch collects name, department, hobbies, and preferred tone; returning users skip it.
+
+### Desktop architecture
+
+- `pixel-cat/main.js` owns the Electron windows, global cursor/key hooks, local schedules, user state, right-click menu, dialog windows, Pomodoro timer, reminder engine, checklist engine, mood check-ins, and the Friday recap.
+- `pixel-cat/preload.js` exposes the safe `catAPI` bridge used by the transparent renderer.
+- `pixel-cat/dialog-preload.js` exposes the shared `api` bridge used by profile/reminders/Pomodoro/checklist dialogs.
+- `pixel-cat/index.html` renders the cat, bubble, input, onboarding/tour, image attach flow, chat streaming, hidden action-block parsing, mood prompt capture, and weekly summary display.
+- `pixel-cat/dialogs/*.html` are small focused UI windows for profile, reminders, Pomodoro, and checklist.
+- `pixel-cat/clock.html` plus `clock-preload.js` are the Pomodoro HUD.
+- State lives in `%APPDATA%/Mira/`: `config.json` (agent endpoint override), `profile.json`, `mood.json`, `reminders.json`, `tasks.json`, and `settings.json`.
+- The file renderer cannot call the deployed agent directly because of CORS, so `main.js` relays `POST /chat` and streams SSE chunks back over IPC.
+
+### Desktop assets and tuning
+
+- `assets/mira_still.png` is the source sheet for the rig; `tools/generate_rig.py` rebuilds `mira_base.png`, `mira_rig.png`, and `rig-meta.json`.
+- `assets/mira_yapping.png` and `assets/mira_typing_80x80.png` are hand-made animation sheets.
+- `docs/media/mira-*.gif` are README animations generated from the same app sprites.
+- Common tuning constants live in `index.html` and `main.js`: cat scale, bubble dimensions, yap speed, reply typewriter speed, typing decay, and overheat gain/cooldown.
+
 ## GitHub release
 
 Tagged releases build Windows artifacts in GitHub Actions:
@@ -78,7 +119,7 @@ Secrets live in a `.env` at the repo root (never committed — see `.gitignore`)
 | `HACKATHON_API_KEY` | API key for the VNG MaaS LLM endpoint used by `app.py` / `chatbot.py` |
 | `GREENNODE_CLIENT_ID` / `GREENNODE_CLIENT_SECRET` | IAM credentials for AgentBase deployment |
 
-The desktop pet keeps its own per-user state (profile, reminders, tasks, settings) in `%APPDATA%/Mira/`, not in this repo.
+The desktop pet keeps its own per-user state (profile, mood check-ins, reminders, tasks, settings) in `%APPDATA%/Mira/`, not in this repo.
 On first launch it also creates `%APPDATA%/Mira/config.json`; edit that file to point the packaged app at a different agent endpoint without rebuilding.
 
 ## Status

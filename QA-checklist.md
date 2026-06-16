@@ -5,8 +5,8 @@ The agent backend is tested briefly at the end (the pet depends on it). Mark eac
 Pass / Fail / N/A and note anything odd.
 
 Run the pet with `cd pixel-cat && npm install --ignore-scripts && npm start`.
-Per-user state lives in `%APPDATA%/Mira/` (`profile.json`, `reminders.json`,
-`tasks.json`, `settings.json`) — delete a file to reset that feature.
+Per-user state lives in `%APPDATA%/Mira/` (`profile.json`, `mood.json`,
+`reminders.json`, `tasks.json`, `settings.json`) — delete a file to reset that feature.
 
 ---
 
@@ -72,22 +72,39 @@ Delete `%APPDATA%/Mira/profile.json` to re-trigger.
 ## 7. Reminders (`Reminders…`)
 
 - [ ] The window lists existing reminders (sorted by next time) and has an add form
-- [ ] Add a **one-off** ~1 min out → at the time, Mira pops `⏰ "…" is due now!` and it disappears from the list + storage
-- [ ] Add with a **remind-before** (e.g. 15 min) far enough out → the pre-warning fires too
-- [ ] Add a **daily** and a **weekly** → shown as "Daily at HH:MM" / "Weekly · Day HH:MM"
-- [ ] **Delete** removes a reminder; list live-refreshes on add/delete/fire
+- [ ] Add a **one-off** ~1 min out -> at the time, Mira pops `⏰ "..." is due now!` and it stays visible as completed for the current workweek
+- [ ] Add with a **remind-before** (e.g. 15 min) far enough out -> the pre-warning fires too
+- [ ] Add a **daily** and a **weekly** -> shown as "Daily at HH:MM" / "Weekly · Day HH:MM"
+- [ ] **Hide** removes a reminder from the Reminders window but keeps its local weekly record for the Friday recap
+- [ ] Completed one-off reminders survive an app restart during the same workweek
 - [ ] Recurring reminders survive an app restart (missed ones roll forward, no backlog spam)
 
 ## 8. Checklist (`Checklist…`)
 
-- [ ] **Add task** with a title + deadline → appears as a card with a 0/0 progress bar
+- [ ] **Add task** with a title + deadline and no subtasks -> appears with a top-level **Done** button and a 0/1 progress bar
+- [ ] Click top-level **Done** -> task marks complete, progress becomes 1/1, and **Undo** returns it to active
 - [ ] **Add subtasks** via the inline field on the card
 - [ ] **Check/uncheck** subtasks → progress bar fills proportionally (`2/3 · 67%`), checked items strike through
 - [ ] A **past deadline** on an incomplete task shows "overdue" in red
-- [ ] **Delete** task (×) / delete subtask (×) work; list live-refreshes
+- [ ] Hide task (×) / hide subtask (×) removes it from the Checklist window but keeps the local weekly record
+- [ ] Completed tasks/subtasks remain visible during the current workweek unless hidden
 - [ ] Tasks persist across an app restart
 
-## 9. Pomodoro (`Start Pomodoro…`)
+## 9. Mood check-ins + Friday recap
+
+Delete `%APPDATA%/Mira/mood.json` to reset mood data. To test schedules without waiting, set the Windows clock to the target weekday/time and launch Mira.
+
+- [ ] Set clock to a weekday at **09:29**, launch Mira, wait until **09:30** -> Mira opens chat and asks how you're feeling
+- [ ] Answer the prompt -> Mira responds normally via chat and `%APPDATA%/Mira/mood.json` records today's entry
+- [ ] Relaunch later the same day -> the 09:30 prompt does **not** repeat after today's mood response is recorded
+- [ ] Set previous workday, answer with a low mood (e.g. "bad/stressed"), then set the clock to the next workday after 09:30 and relaunch -> Mira's prompt references yesterday's mood
+- [ ] Complete or hide at least one checklist item and let at least one reminder complete during the same workweek
+- [ ] Set clock to **Friday 16:59**, launch Mira, wait until **17:00** -> Mira shows an encouraging weekly summary
+- [ ] Friday summary mentions mood trend plus completed or hidden checklist/reminder activity where available
+- [ ] Relaunch after Friday 17:00 in the same workweek -> weekly summary does **not** repeat
+- [ ] If the agent endpoint is unreachable at Friday 17:00, Mira still shows a local fallback summary instead of hanging
+
+## 10. Pomodoro (`Start Pomodoro…`)
 
 - [ ] Config dialog takes focus / short break / long break / intervals
 - [ ] A small transparent **timer HUD** appears **above Mira's head** and counts down
@@ -98,7 +115,7 @@ Delete `%APPDATA%/Mira/profile.json` to re-trigger.
 - [ ] **Timer color ▸** changes the clock colour live; "Auto" tints by phase (focus red / break green); choice persists
 - [ ] **Stop Pomodoro** closes the HUD and the menu item flips back
 
-## 10. Natural-language create (via chat)
+## 11. Natural-language create (via chat)
 
 - [ ] "remind me to … at 5pm tomorrow" creates a **reminder** (check Reminders…); no raw `[[…]]` text flashes in the bubble
 - [ ] "create a Financial Model task with subtasks revenue, costs, valuation due Friday" creates a **task with those subtasks**
@@ -108,7 +125,7 @@ Delete `%APPDATA%/Mira/profile.json` to re-trigger.
 - [ ] "what's on my task list?" / "how's the … task going?" → answered from the actual checklist
 - [ ] A normal chat message creates nothing (no phantom reminder/task)
 
-## 11. Image input (attach)
+## 12. Image input (attach)
 
 - [ ] With the chat open, the **📎 button** opens a file picker; choosing an image shows an "Image attached" thumbnail chip above the input
 - [ ] **Paste** (Ctrl+V) a copied image / screenshot → same chip appears
@@ -118,20 +135,21 @@ Delete `%APPDATA%/Mira/profile.json` to re-trigger.
 - [ ] A **follow-up** question about the same image still works (image kept in session history)
 - [ ] Large images don't error or stall (downscaled to ~1024px JPEG before sending)
 
-## 12. Edit profile (`Edit profile…`)
+## 13. Edit profile (`Edit profile…`)
 
 - [ ] Opens prefilled with current values; Save updates them (Ctrl+Enter saves, Esc cancels)
 - [ ] After editing, a new chat reply reflects the change (e.g. new tone/name)
 
-## 13. Persistence & multi-window
+## 14. Persistence & multi-window
 
-- [ ] Quit and relaunch → profile, reminders, tasks, and timer-colour are all retained
+- [ ] Quit and relaunch -> profile, mood data, reminders, tasks, and timer-colour are all retained
 - [ ] Opening multiple dialogs and the menu doesn't freeze the cat animation or the timer
 
-## 14. Packaging (optional — only if testing the .exe)
+## 15. Packaging (optional — only if testing the ZIP release)
 
-- [ ] `npm run dist` produces a runnable portable `.exe` (from a path **without** `&` for local builds)
-- [ ] The packaged app launches and chats
+- [ ] `npm run dist` produces `dist/Mira-<version>-win.zip` (from a path **without** `&` for local builds)
+- [ ] Extract the ZIP and run `Mira.exe`
+- [ ] The packaged app launches and chats with the live endpoint
 - [ ] **Typing reaction + overheat work in the packaged app** (confirms the `uiohook-napi` native module was unpacked)
 
 ---
@@ -153,7 +171,7 @@ The pet talks to the deployed agent over `POST /chat` (SSE). Quick checks:
 
 - **Pokémon-style "!" alert** for reminders — planned, sprite pending.
 - **Skins** (swappable sprite sets) — planned, not started.
-- **Signing / trust** — portable `.exe` is unsigned for now, so Windows may show SmartScreen warnings.
+- **Signing / trust** — the ZIP release contains an unsigned Windows app, so Windows may show SmartScreen warnings.
 
 ---
 
