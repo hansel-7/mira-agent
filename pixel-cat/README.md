@@ -36,7 +36,7 @@ The cat appears near the bottom-right of your screen.
 - **Weekly retention** — completed reminders and checklist items stay visible through the current workweek. Hiding an item removes it from the dialog view but keeps the weekly record for Friday's recap.
 - **Pomodoro** — set focus/break/long-break/intervals; a small timer HUD sits above Mira's head (follows her, bubble lifts to clear it) and she announces each phase. Timer colour is configurable.
 - **Talk to create** — "remind me to submit the report at 5pm tomorrow" or "create a Financial Model task with subtasks revenue, costs, valuation due Friday" creates the reminder/task straight from chat; Mira can also generate the subtasks for you.
-- **Right-click menu** — Checklist…, Reminders…, Start/Stop Pomodoro…, Timer color ▸, Cat color…, Edit profile…, Quit.
+- **Right-click menu** — Checklist…, Reminders…, Start/Stop Pomodoro…, Timer color ▸, Cat color…, Show Friday recap, Edit profile…, Quit.
 - **Personalized** — a first-run onboarding (name/department/hobbies/behaviour) plus a quick feature tour; your profile personalizes replies and is editable via Edit profile…. Returning users skip onboarding.
 
 ## Architecture

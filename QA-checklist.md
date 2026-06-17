@@ -76,7 +76,7 @@ Delete `%APPDATA%/Mira/profile.json` to re-trigger.
 
 ## 7. Right-click menu
 
-- [ ] Right-clicking the cat opens a native menu: Checklist…, Reminders…, Start Pomodoro…, Timer color ▸, Cat color…, Edit profile…, Quit
+- [ ] Right-clicking the cat opens a native menu: Checklist…, Reminders…, Start Pomodoro…, Timer color ▸, Cat color…, Show Friday recap, Edit profile…, Quit
 - [ ] When Pomodoro is running the item reads **Stop Pomodoro**
 - [ ] Each item opens its window / performs its action
 
@@ -111,6 +111,7 @@ Delete `%APPDATA%/Mira/mood.json` to reset mood data. To test schedules without 
 - [ ] Set previous workday, answer with a low mood (e.g. "bad/stressed"), then set the clock to the next workday after 09:30 and relaunch -> Mira's prompt references yesterday's mood
 - [ ] Complete or hide at least one checklist item and let at least one reminder complete during the same workweek
 - [ ] Set clock to **Friday 16:59**, launch Mira, wait until **17:00** -> Mira opens the **Friday recap** window
+- [ ] Right-click -> **Show Friday recap** opens the same recap window immediately without changing the weekly summary marker
 - [ ] Mood trail shows five weekday emoji cells (Mon-Fri), with missing days shown as no-check-in cells
 - [ ] Conquered section lists completed or hidden checklist/reminder activity where available
 - [ ] Encouragement section reflects the mood trend and completed/cleared activity without sounding clinical

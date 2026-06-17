@@ -1,0 +1,50 @@
+{
+  "entries": [
+    {
+      "date": "2026-06-15",
+      "promptedAt": 1781479800000,
+      "respondedAt": 1781480160000,
+      "rawText": "Feeling good and pretty focused. I have a lot to do, but it feels manageable.",
+      "mood": "positive",
+      "score": 0.34,
+      "summary": "Feeling good and pretty focused. I have a lot to do, but it feels manageable."
+    },
+    {
+      "date": "2026-06-16",
+      "promptedAt": 1781566200000,
+      "respondedAt": 1781566620000,
+      "rawText": "A little stressed and tired today. There are a few moving parts, and I am trying to keep up.",
+      "mood": "low",
+      "score": -0.42,
+      "summary": "A little stressed and tired today. There are a few moving parts, and I am trying to keep up."
+    },
+    {
+      "date": "2026-06-17",
+      "promptedAt": 1781652600000,
+      "respondedAt": 1781653080000,
+      "rawText": "Steady today. Not amazing, not bad. I am making progress one thing at a time.",
+      "mood": "neutral",
+      "score": 0,
+      "summary": "Steady today. Not amazing, not bad. I am making progress one thing at a time."
+    },
+    {
+      "date": "2026-06-18",
+      "promptedAt": 1781739000000,
+      "respondedAt": 1781739420000,
+      "rawText": "Much better. The work is coming together, and I feel more confident about the demo.",
+      "mood": "positive",
+      "score": 0.58,
+      "summary": "Much better. The work is coming together, and I feel more confident about the demo."
+    },
+    {
+      "date": "2026-06-19",
+      "promptedAt": 1781825400000,
+      "respondedAt": 1781825760000,
+      "rawText": "Excited and proud. It has been a full week, but Mira is ready to show.",
+      "mood": "positive",
+      "score": 0.72,
+      "summary": "Excited and proud. It has been a full week, but Mira is ready to show."
+    }
+  ],
+  "lastWeeklySummaryWeek": null
+}

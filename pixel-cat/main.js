@@ -658,6 +658,12 @@ function showWeeklySummary(activity, encouragementText) {
   notify('Your Friday recap is ready.');
   openDialog('weekly-summary');
 }
+function showWeeklySummaryNow() {
+  const activity = weeklyActivity(new Date());
+  latestWeeklySummaryPayload = buildWeeklyRecapPayload(activity, weeklySummaryFallback(activity));
+  notify('Opening your Friday recap.');
+  openDialog('weekly-summary');
+}
 function formatEventDate(ms) {
   const d = new Date(ms);
   return `${SHORT_WEEKDAY[d.getDay()]} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -1192,6 +1198,7 @@ function buildMenu() {
     })),
   });
   items.push({ label: 'Cat color…', click: () => openDialog('cat-color') });
+  items.push({ label: 'Show Friday recap', click: showWeeklySummaryNow });
   items.push({ label: 'Edit profile…', click: () => openDialog('profile') });
   items.push({ type: 'separator' });
   items.push({ label: 'Quit Mira', click: () => app.quit() });

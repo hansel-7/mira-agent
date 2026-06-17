@@ -123,6 +123,8 @@ Secrets live in a `.env` at the repo root (never committed — see `.gitignore`)
 The desktop pet keeps its own per-user state (profile, mood check-ins, reminders, tasks, settings) in `%APPDATA%/Mira/`, not in this repo.
 On first launch it also creates `%APPDATA%/Mira/config.json`; edit that file to point the packaged app at a different agent endpoint without rebuilding.
 
+For demo recordings, `docs/demo-mood-history.json` can be copied to `%APPDATA%/Mira/mood.json`, then **Show Friday recap** in Mira's right-click menu opens the visual mood recap immediately.
+
 ## Status
 
 Built for the VNG GreenNode Claw-a-thon 2026. The agent is deployed and the desktop pet connects to it; packaging is focused on a Windows ZIP release for GitHub, built locally or by the `Build Mira Windows ZIP` workflow.
